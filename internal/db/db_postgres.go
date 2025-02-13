@@ -47,6 +47,8 @@ func getPostgresDSN() string {
 	password := os.Getenv("DB_PASSWORD")
 	dbname := os.Getenv("DB_NAME")
 
+	log.Printf("🔍 Conectando ao PostgreSQL: host=%s port=%s dbname=%s", host, port, dbname) // 🔥 Log de debug
+
 	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		host, port, user, password, dbname)
 }
