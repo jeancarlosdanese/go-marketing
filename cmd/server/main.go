@@ -12,17 +12,12 @@ import (
 
 	"github.com/jeancarlosdanese/go-marketing/config"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
-	"github.com/jeancarlosdanese/go-marketing/internal/observability"
 	"github.com/jeancarlosdanese/go-marketing/internal/server"
 )
 
 func main() {
 	// Inicializar logger
 	log := logger.GetLogger()
-
-	// Inicializar OpenTelemetry ANTES de carregar o router
-	cleanup := observability.InitTracer()
-	defer cleanup()
 
 	// Carregar configurações do .env
 	config.LoadConfig(".env")
