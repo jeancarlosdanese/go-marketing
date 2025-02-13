@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,17 +12,29 @@ import (
 	"time"
 
 	"github.com/jeancarlosdanese/go-marketing/config"
+	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/server"
 )
 
 func main() {
+	// Carregar configurações do .env
+	config.LoadConfig()
+
 	// Inicializar logger
 	log := logger.GetLogger()
-
-	// Carregar configurações do .env
-	config.LoadConfig(".env")
 	log.Info("Configurações carregadas.")
+
+	// 🔥 Agora o banco é escolhido com base no .env (`DB_DRIVER=postgres`)
+	dbInstance, err := db.GetDatabase()
+	if err != nil {
+		fmt.Println("Erro ao conectar ao banco:", err)
+		os.Exit(1)
+	}
+	defer dbInstance.Close() // 🔌 Fecha a conexão corretamente ao encerrar a aplicação
+
+	// 🔥 Criar repositório usando a conexão passada como argumento
+	// repo := postgres.NewAccountRepository(dbInstance)
 
 	// Criar o servidor HTTP
 	srv := &http.Server{
