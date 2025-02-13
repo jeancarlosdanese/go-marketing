@@ -41,6 +41,11 @@ main
 main.exe
 ./main.exe
 
+/logs
+/logs/*
+**/logs/
+**/logs/*
+
 /deploy
 /deploy/
 /deploy/*
