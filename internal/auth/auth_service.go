@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"os"
+
+	"github.com/jeancarlosdanese/go-marketing/internal/models"
 )
 
 // GenerateOTP cria uma senha numérica de 8 dígitos
@@ -23,4 +26,12 @@ func GenerateOTP() (string, error) {
 func SendOTP(destination string, otp string) {
 	// Aqui podemos integrar com um serviço de e-mail ou WhatsApp
 	log.Printf("📩 Enviando OTP para %s: %s", destination, otp)
+}
+
+// IsAdmin verifica se a conta é admin com base no `.env`
+func IsAdmin(account *models.Account) bool {
+	adminEmail := os.Getenv("ADMIN_EMAIL")
+	adminWhatsApp := os.Getenv("ADMIN_WHATSAPP")
+
+	return account.Email == adminEmail || account.WhatsApp == adminWhatsApp
 }

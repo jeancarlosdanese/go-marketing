@@ -35,6 +35,7 @@ func (r *AccountRepoPostgres) Create(account *models.Account) (*models.Account, 
 
 	err := r.db.QueryRow(query, account.ID, account.Name, account.Email, account.WhatsApp).Scan(&account.ID)
 	if err != nil {
+		log.Printf("❌ Erro ao criar conta: %v", err)
 		return nil, err
 	}
 

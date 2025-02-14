@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"runtime/debug"
 	"sync"
 )
 
@@ -33,10 +34,13 @@ var once sync.Once
 
 // GetLogger retorna uma instância única do logger
 func GetLogger() *Logger {
-
-	// Usar sync.Once para garantir que a instância seja criada apenas uma vez
 	once.Do(func() {
-		// Criar arquivo de log
+		// Criar diretório logs se não existir
+		if _, err := os.Stat("logs"); os.IsNotExist(err) {
+			os.Mkdir("logs", 0755)
+		}
+
+		// Criar ou abrir arquivo de log
 		logFile, err := os.OpenFile("logs/app.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			log.Fatalf("Erro ao abrir arquivo de log: %v", err)
@@ -60,9 +64,16 @@ func GetLogger() *Logger {
 func (l *Logger) Debug(msg string) { l.debugLog.Println(msg) }
 func (l *Logger) Info(msg string)  { l.infoLog.Println(msg) }
 func (l *Logger) Warn(msg string)  { l.warnLog.Println(msg) }
-func (l *Logger) Error(msg string) { l.errorLog.Println(msg) }
+
+// Captura erro e stack trace
+func (l *Logger) Error(msg string) {
+	stack := debug.Stack()
+	l.errorLog.Printf("%s\nStack Trace:\n%s", msg, string(stack))
+}
+
 func (l *Logger) Fatal(msg string) {
-	l.fatalLog.Println(msg)
+	stack := debug.Stack()
+	l.fatalLog.Printf("%s\nStack Trace:\n%s", msg, string(stack))
 	l.logFile.Close()
 	os.Exit(1)
 }
