@@ -11,4 +11,7 @@ import (
 type AccountRepository interface {
 	Create(account *models.Account) (*models.Account, error)
 	GetByID(id uuid.UUID) (*models.Account, error)
+	GetAll() ([]*models.Account, error)
+	UpdateByID(id uuid.UUID, jsonData []byte) (*models.Account, error)
+	DeleteByID(id uuid.UUID) (uuid.UUID, error)
 }
