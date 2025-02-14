@@ -5,13 +5,13 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
+	"github.com/jeancarlosdanese/go-marketing/internal/dto"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/middleware"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
@@ -40,24 +40,31 @@ func NewAccountHandle(repo db.AccountRepository) AccountHandle {
 // CreateAccountHandler cria uma nova conta
 func (h *accountHandle) CreateAccountHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var account models.Account
-		// 🔥 Decodificar JSON corretamente
-		if err := json.NewDecoder(r.Body).Decode(&account); err != nil {
+		var accountDTO dto.AccountCreateDTO
+
+		// 🔥 Decodificar JSON para DTO
+		if err := json.NewDecoder(r.Body).Decode(&accountDTO); err != nil {
 			h.log.Error("Erro ao decodificar JSON", "error", err)
 			SendError(w, http.StatusBadRequest, "Erro ao processar requisição")
 			return
 		}
 		defer r.Body.Close()
 
-		// 🔥 Validar os dados antes de criar a conta
-		if err := account.Validate(false); err != nil {
+		// 🔥 Validar DTO
+		if err := accountDTO.Validate(); err != nil {
 			h.log.Warn("Erro de validação: " + err.Error())
 			SendError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
-		// 🔥 Criar a conta
-		createdAccount, err := h.repo.Create(&account)
+		// 🔥 Criar a conta no banco
+		account := &models.Account{
+			Name:     accountDTO.Name,
+			Email:    accountDTO.Email,
+			WhatsApp: accountDTO.WhatsApp,
+		}
+
+		createdAccount, err := h.repo.Create(account)
 		if err != nil {
 			h.log.Error("Erro ao criar conta", "error", err)
 
@@ -70,16 +77,18 @@ func (h *accountHandle) CreateAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		h.log.Info(fmt.Sprintf("✅ Conta criada com sucesso: %v", createdAccount))
+		// 🔥 Criar resposta DTO já formatada
+		response := dto.NewAccountResponseDTO(createdAccount)
+
+		h.log.Info(fmt.Sprintf("✅ Conta criada com sucesso: %v", response))
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(createdAccount)
+		json.NewEncoder(w).Encode(response)
 	}
 }
 
 // GetAllAccountsHandler retorna todas as contas cadastradas
 func (h *accountHandle) GetAllAccountsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 🔍 Buscar todas as contas
 		authAccount, ok := middleware.GetAuthenticatedAccount(r.Context())
 		if !ok {
 			h.log.Error("Conta não encontrada no contexto")
@@ -94,7 +103,6 @@ func (h *accountHandle) GetAllAccountsHandler() http.HandlerFunc {
 			return
 		}
 
-		// 🔍 Buscar todas as contas
 		accounts, err := h.repo.GetAll()
 		if err != nil {
 			h.log.Error("Erro ao buscar contas", "error", err)
@@ -102,8 +110,16 @@ func (h *accountHandle) GetAllAccountsHandler() http.HandlerFunc {
 			return
 		}
 
+		// 🔥 Criar resposta DTO para todas as contas
+		var response []dto.AccountResponseDTO
+		for _, acc := range accounts {
+			// 🔥 Criar resposta DTO já formatada
+			accountDto := dto.NewAccountResponseDTO(acc)
+			response = append(response, accountDto)
+		}
+
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(accounts)
+		json.NewEncoder(w).Encode(response)
 	}
 }
 
@@ -141,8 +157,10 @@ func (h *accountHandle) GetAccountHandler() http.HandlerFunc {
 			return
 		}
 
+		accountDto := dto.NewAccountResponseDTO(account)
+
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(account)
+		json.NewEncoder(w).Encode(accountDto)
 	}
 }
 
@@ -164,21 +182,14 @@ func (h *accountHandle) UpdateAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		// 🔥 Lendo JSON corretamente do corpo da requisição
-		jsonData, err := io.ReadAll(r.Body)
-		if err != nil {
-			h.log.Error("Erro ao ler corpo da requisição", "error", err)
+		// 🔥 Decodificar JSON para DTO
+		var updateDTO dto.AccountUpdateDTO
+		if err := json.NewDecoder(r.Body).Decode(&updateDTO); err != nil {
+			h.log.Error("Erro ao decodificar JSON", "error", err)
 			SendError(w, http.StatusBadRequest, "Erro ao processar requisição")
 			return
 		}
 		defer r.Body.Close()
-
-		// Se o JSON estiver vazio, retorna erro
-		if len(jsonData) == 0 {
-			h.log.Error("JSON vazio")
-			SendError(w, http.StatusBadRequest, "JSON vazio")
-			return
-		}
 
 		// Apenas administradores podem atualizar outras contas
 		if !authAccount.IsAdmin() && authAccount.ID != id {
@@ -187,47 +198,53 @@ func (h *accountHandle) UpdateAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		// 🔍 Buscar a conta antes da atualização
-		_, err = h.repo.GetByID(id)
-		if err != nil {
-			h.log.Error("Erro ao buscar conta", "error", err)
-			SendError(w, http.StatusNotFound, "Conta não encontrada")
-			return
-		}
-
 		// Apenas administradores podem alterar e-mail e WhatsApp
 		if !authAccount.IsAdmin() {
-			// Verifica se o JSON contém campos proibidos
-			var updateData map[string]interface{}
-			if err := json.Unmarshal(jsonData, &updateData); err != nil {
-				h.log.Error("Erro ao decodificar JSON", "error", err)
-				SendError(w, http.StatusBadRequest, "Erro ao decodificar JSON")
+			if updateDTO.Email != "" || updateDTO.WhatsApp != "" {
+				h.log.Warn("Apenas administradores podem alterar e-mail e WhatsApp")
+				SendError(w, http.StatusForbidden, "Apenas administradores podem alterar e-mail e WhatsApp")
 				return
 			}
+		}
 
-			// Proibir alteração de e-mail e WhatsApp
-			if _, exists := updateData["email"]; exists {
-				h.log.Warn("Apenas administradores podem alterar o e-mail")
-				SendError(w, http.StatusForbidden, "Apenas administradores podem alterar o e-mail")
-				return
-			}
-			if _, exists := updateData["whatsapp"]; exists {
-				h.log.Warn("Apenas administradores podem alterar o WhatsApp")
-				SendError(w, http.StatusForbidden, "Apenas administradores podem alterar o WhatsApp")
-				return
-			}
+		// 🔥 Validar DTO
+		if err := updateDTO.Validate(); err != nil {
+			h.log.Warn("Erro de validação: " + err.Error())
+			SendError(w, http.StatusBadRequest, err.Error())
+			return
 		}
 
 		// 🔄 Atualizar a conta
+		updateData := map[string]interface{}{}
+		if updateDTO.Name != "" {
+			updateData["name"] = updateDTO.Name
+		}
+		if updateDTO.Email != "" {
+			updateData["email"] = updateDTO.Email
+		}
+		if updateDTO.WhatsApp != "" {
+			updateData["whatsapp"] = updateDTO.WhatsApp
+		}
+
+		jsonData, _ := json.Marshal(updateData)
 		updatedAccount, err := h.repo.UpdateByID(id, jsonData)
 		if err != nil {
 			h.log.Error("Erro ao atualizar conta", "error", err)
-			SendError(w, http.StatusInternalServerError, "Erro ao atualizar conta")
+
+			// 🔥 Tratar erro de chave duplicada no PostgreSQL
+			if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+				SendError(w, http.StatusConflict, "E-mail ou WhatsApp já cadastrado")
+			} else {
+				SendError(w, http.StatusInternalServerError, "Erro ao atualizar conta")
+			}
 			return
 		}
 
+		// 🔥 Criar resposta DTO já formatada
+		response := dto.NewAccountResponseDTO(updatedAccount)
+
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(updatedAccount)
+		json.NewEncoder(w).Encode(response)
 	}
 }
 
