@@ -1,25 +1,27 @@
-// File: /internal/server/router.go
-
 package server
 
 import (
 	"net/http"
 
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
+	"github.com/jeancarlosdanese/go-marketing/internal/middleware"
 )
 
-// NewRouter cria um roteador HTTP modular
+// NewRouter cria e retorna um roteador HTTP configurado.
 func NewRouter(accountRepo db.AccountRepository, otpRepo db.AccountOTPRepository) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	// 🔥 Registrar rotas específicas para cada módulo
-	RegisterAccountRoutes(mux, accountRepo)
+	// 🔥 Criar middlewares
+	authMiddleware := middleware.AuthMiddleware(accountRepo)
+
+	// 🔥 Registrar rotas principais
+	RegisterAccountRoutes(mux, authMiddleware, accountRepo)
 	RegisterAuthRoutes(mux, otpRepo)
 
-	// Health Check
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	// 🔥 Rota de Health Check
+	mux.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
-	})
+	}))
 
 	return mux
 }

@@ -118,16 +118,8 @@ func (h *accountHandle) GetAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		// 🔥 Extrair o ID da URL
-		pathParts := strings.Split(r.URL.Path, "/")
-		if len(pathParts) < 3 {
-			h.log.Error("ID não fornecido")
-			SendError(w, http.StatusBadRequest, "ID não fornecido")
-			return
-		}
-
-		// 🔥 Se o ID não for um UUID válido, retorna erro
-		accountID, err := uuid.Parse(pathParts[2])
+		accountID := r.PathValue("id")
+		id, err := uuid.Parse(accountID)
 		if err != nil {
 			h.log.Error("ID inválido", "error", err)
 			SendError(w, http.StatusBadRequest, "ID inválido")
@@ -135,14 +127,14 @@ func (h *accountHandle) GetAccountHandler() http.HandlerFunc {
 		}
 
 		// Apenas administradores podem buscar outras contas
-		if !authAccount.IsAdmin() && authAccount.ID != accountID {
+		if !authAccount.IsAdmin() && authAccount.ID != id {
 			h.log.Warn("Apenas administradores podem buscar outras contas")
 			SendError(w, http.StatusForbidden, "Apenas administradores podem buscar outras contas")
 			return
 		}
 
 		// 🔍 Buscar a conta pelo ID
-		account, err := h.repo.GetByID(accountID)
+		account, err := h.repo.GetByID(id)
 		if err != nil {
 			h.log.Error("Erro ao buscar conta", "error", err)
 			SendError(w, http.StatusNotFound, "Conta não encontrada")
@@ -164,18 +156,8 @@ func (h *accountHandle) UpdateAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		// 🔥 Extrair o ID da URL
-		pathParts := strings.Split(r.URL.Path, "/")
-
-		// Se não houver ID, retorna erro
-		if len(pathParts) < 3 {
-			h.log.Error("ID não fornecido")
-			SendError(w, http.StatusBadRequest, "ID não fornecido")
-			return
-		}
-
-		// Se o ID não for um UUID válido, retorna erro
-		accountID, err := uuid.Parse(pathParts[2])
+		accountID := r.PathValue("id")
+		id, err := uuid.Parse(accountID)
 		if err != nil {
 			h.log.Error("ID inválido", "error", err)
 			SendError(w, http.StatusBadRequest, "ID inválido")
@@ -199,14 +181,14 @@ func (h *accountHandle) UpdateAccountHandler() http.HandlerFunc {
 		}
 
 		// Apenas administradores podem atualizar outras contas
-		if !authAccount.IsAdmin() && authAccount.ID != accountID {
+		if !authAccount.IsAdmin() && authAccount.ID != id {
 			h.log.Warn("Apenas administradores podem atualizar outras contas")
 			SendError(w, http.StatusForbidden, "Apenas administradores podem atualizar outras contas")
 			return
 		}
 
 		// 🔍 Buscar a conta antes da atualização
-		_, err = h.repo.GetByID(accountID)
+		_, err = h.repo.GetByID(id)
 		if err != nil {
 			h.log.Error("Erro ao buscar conta", "error", err)
 			SendError(w, http.StatusNotFound, "Conta não encontrada")
@@ -237,7 +219,7 @@ func (h *accountHandle) UpdateAccountHandler() http.HandlerFunc {
 		}
 
 		// 🔄 Atualizar a conta
-		updatedAccount, err := h.repo.UpdateByID(accountID, jsonData)
+		updatedAccount, err := h.repo.UpdateByID(id, jsonData)
 		if err != nil {
 			h.log.Error("Erro ao atualizar conta", "error", err)
 			SendError(w, http.StatusInternalServerError, "Erro ao atualizar conta")
@@ -260,19 +242,10 @@ func (h *accountHandle) DeleteAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		// 🔥 Extrair o ID da URL
-		pathParts := strings.Split(r.URL.Path, "/")
-		if len(pathParts) < 3 {
-			h.log.Error("ID não fornecido")
-			SendError(w, http.StatusBadRequest, "ID não fornecido")
-			return
-		}
-
-		// 🔥 Se o ID não for um UUID válido, retorna erro
-		accountID, err := uuid.Parse(pathParts[2])
+		accountID := r.PathValue("id")
+		id, err := uuid.Parse(accountID)
 		if err != nil {
-			h.log.Error("ID inválido", "error", err)
-			SendError(w, http.StatusBadRequest, "ID inválido")
+			http.Error(w, "ID inválido", http.StatusBadRequest)
 			return
 		}
 
@@ -290,14 +263,14 @@ func (h *accountHandle) DeleteAccountHandler() http.HandlerFunc {
 			SendError(w, http.StatusInternalServerError, "Erro interno do servidor")
 			return
 		}
-		if accountID == adminUUID {
+		if id == adminUUID {
 			h.log.Warn("O administrador não pode ser deletado")
 			SendError(w, http.StatusForbidden, "O administrador não pode ser deletado")
 			return
 		}
 
 		// ❌ Deleta a conta e retorna o AccountID deletado
-		deletedID, err := h.repo.DeleteByID(accountID)
+		deletedID, err := h.repo.DeleteByID(id)
 		if err != nil {
 			h.log.Error("Erro ao deletar conta", "error", err)
 			SendError(w, http.StatusInternalServerError, "Erro ao deletar conta")
