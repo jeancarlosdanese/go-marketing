@@ -1,79 +1,60 @@
 // File: internal/logger/logger.go
 
+// Package logger é responsável por criar uma instância única do logger
+// para ser utilizado em todo o sistema.
+// O logger é baseado no pacote log/slog que é uma extensão do pacote log padrão
+// do Go, porém com suporte a logs estruturados em JSON.
+// O logger é inicializado apenas uma vez e é retornado sempre a mesma instância
+// para ser utilizado em todo o sistema.
+// O logger é inicializado com o nível de log INFO, ou seja, apenas logs de nível
+// INFO ou superior serão exibidos.
+// Para utilizar o logger, basta importar o pacote e chamar a função GetLogger().
+// Exemplo:
+//
+//	logger := logger.GetLogger()
+//	logger.Info("Mensagem de log")
+//	logger.Warn("Mensagem de log")
+//	logger.Error("Mensagem de log")
+//	logger.Debug("Mensagem de log")
+//	logger.WithField("campo", "valor").Info("Mensagem de log")
+//	logger.WithFields(slog.Fields{"campo1": "valor1", "campo2": "valor2"}).Info("Mensagem de log")
+//	logger.WithError(err).Error("Mensagem de log")
+//	logger.WithError(err).WithField("campo", "valor").Error("Mensagem de log")
+//	logger.WithError(err).WithFields(slog.Fields{"campo1": "valor1", "campo2": "valor2"}).Error("Mensagem de log")
+//	logger.WithFields(slog.Fields{"campo1": "valor1", "campo2": "valor2"}).WithError(err).Error("Mensagem de log")
+//	logger.WithFields(slog.Fields{"campo1": "valor1", "campo2": "valor2"}).WithField("campo", "valor").WithError(err).Error("Mensagem de log")
+//	logger.WithFields(slog.Fields{"campo1": "valor1", "campo2": "valor2"}).WithField("campo", "valor").WithError(err).Info("Mensagem de log")
+//	logger.WithFields(slog.Fields{"campo1": "valor1", "campo2": "valor2"}).WithField("campo", "valor").WithError(err).Debug("Mensagem de log")
+
 package logger
 
 import (
-	"io"
-	"log"
+	"log/slog"
 	"os"
-	"runtime/debug"
+	"strings"
 	"sync"
 )
 
-// Níveis de log
-const (
-	DEBUG = "DEBUG"
-	INFO  = "INFO"
-	WARN  = "WARN"
-	ERROR = "ERROR"
-	FATAL = "FATAL"
-)
-
-// Logger estrutura o logger com múltiplos níveis
-type Logger struct {
-	debugLog *log.Logger
-	infoLog  *log.Logger
-	warnLog  *log.Logger
-	errorLog *log.Logger
-	fatalLog *log.Logger
-	logFile  *os.File
-}
-
-var instance *Logger
+// Logger é a estrutura do sistema de logs
+var log *slog.Logger
 var once sync.Once
 
 // GetLogger retorna uma instância única do logger
-func GetLogger() *Logger {
+func GetLogger() *slog.Logger {
 	once.Do(func() {
-		// Criar diretório logs se não existir
-		if _, err := os.Stat("logs"); os.IsNotExist(err) {
-			os.Mkdir("logs", 0755)
+		// Verificar se `APP_DEBUG` está ativado
+		logLevel := slog.LevelInfo // Padrão (INFO, WARN, ERROR, FATAL)
+		if strings.Contains(os.Getenv("APP_MODE"), "dev") {
+			logLevel = slog.LevelDebug // Ativar logs de DEBUG se APP_DEBUG=true
 		}
 
-		// Criar ou abrir arquivo de log
-		logFile, err := os.OpenFile("logs/app.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Fatalf("Erro ao abrir arquivo de log: %v", err)
-		}
+		// Criar um handler apenas para o console
+		consoleHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: logLevel,
+		})
 
-		multiWriter := io.MultiWriter(os.Stdout, logFile)
-
-		instance = &Logger{
-			debugLog: log.New(multiWriter, "[DEBUG] ", log.Ldate|log.Ltime|log.Lshortfile),
-			infoLog:  log.New(multiWriter, "[INFO]  ", log.Ldate|log.Ltime|log.Lshortfile),
-			warnLog:  log.New(multiWriter, "[WARN]  ", log.Ldate|log.Ltime|log.Lshortfile),
-			errorLog: log.New(multiWriter, "[ERROR] ", log.Ldate|log.Ltime|log.Lshortfile),
-			fatalLog: log.New(multiWriter, "[FATAL] ", log.Ldate|log.Ltime|log.Lshortfile),
-			logFile:  logFile,
-		}
+		// Criar logger
+		log = slog.New(consoleHandler)
 	})
-	return instance
-}
-
-// Métodos para cada nível de log
-func (l *Logger) Debug(msg string) { l.debugLog.Println(msg) }
-func (l *Logger) Info(msg string)  { l.infoLog.Println(msg) }
-func (l *Logger) Warn(msg string)  { l.warnLog.Println(msg) }
-
-// Captura erro e stack trace
-func (l *Logger) Error(msg string) {
-	stack := debug.Stack()
-	l.errorLog.Printf("%s\nStack Trace:\n%s", msg, string(stack))
-}
-
-func (l *Logger) Fatal(msg string) {
-	stack := debug.Stack()
-	l.fatalLog.Printf("%s\nStack Trace:\n%s", msg, string(stack))
-	l.logFile.Close()
-	os.Exit(1)
+	return log
 }

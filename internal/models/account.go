@@ -18,7 +18,7 @@ type Account struct {
 	WhatsApp string    `json:"whatsapp"`
 }
 
-// Validate verifica se os dados da conta são válidos antes de salvar
+// Validate verifica se os dados da conta são válidos antes de salvar ou atualizar
 func (a *Account) Validate(isUpdate bool) error {
 	// Validar nome
 	if len(a.Name) == 0 || len(a.Name) > 100 {
@@ -31,17 +31,20 @@ func (a *Account) Validate(isUpdate bool) error {
 		return errors.New("e-mail inválido")
 	}
 
-	// Validar WhatsApp (somente números)
+	// 🔥 Limpar o WhatsApp (somente números)
 	re := regexp.MustCompile(`\D`) // Remove tudo que não for número
 	a.WhatsApp = re.ReplaceAllString(a.WhatsApp, "")
 
+	// Validar WhatsApp
 	if len(a.WhatsApp) < 10 || len(a.WhatsApp) > 15 {
 		return errors.New("o WhatsApp deve ter entre 10 e 15 dígitos")
 	}
 
-	// Impedir alterações em e-mail e WhatsApp se for um update
+	// 🔥 Impedir alteração de e-mail e WhatsApp em updates
 	if isUpdate {
-		return errors.New("e-mail e WhatsApp não podem ser alterados")
+		if a.Email != "" || a.WhatsApp != "" {
+			return errors.New("e-mail e WhatsApp não podem ser alterados")
+		}
 	}
 
 	return nil
@@ -53,4 +56,10 @@ func (a *Account) FormatWhatsApp() string {
 		return fmt.Sprintf("+%s (%s) %s-%s", a.WhatsApp[:2], a.WhatsApp[2:4], a.WhatsApp[4:8], a.WhatsApp[8:])
 	}
 	return a.WhatsApp
+}
+
+// IsAdmin verifica se a conta é admin baseada no ID fixo
+func (a *Account) IsAdmin() bool {
+	adminID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	return a.ID == adminID
 }

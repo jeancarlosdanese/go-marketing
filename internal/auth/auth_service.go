@@ -33,5 +33,10 @@ func IsAdmin(account *models.Account) bool {
 	adminEmail := os.Getenv("ADMIN_EMAIL")
 	adminWhatsApp := os.Getenv("ADMIN_WHATSAPP")
 
+	log.Printf("🔐 Verificando se a conta é admin: %s", account.Email)
+	log.Printf("🔐 Verificando se a conta é admin: %s", account.WhatsApp)
+	log.Printf("🔐 Verificando se a conta é admin: %s", adminEmail)
+	log.Printf("🔐 Verificando se a conta é admin: %s", adminWhatsApp)
+
 	return account.Email == adminEmail || account.WhatsApp == adminWhatsApp
 }

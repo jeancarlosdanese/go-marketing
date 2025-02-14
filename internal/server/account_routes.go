@@ -14,9 +14,11 @@ import (
 func RegisterAccountRoutes(mux *http.ServeMux, accountRepo db.AccountRepository) {
 	handler := handlers.NewAccountHandle(accountRepo)
 
-	mux.HandleFunc("POST /accounts", handler.CreateAccountHandler())
-	mux.HandleFunc("GET /accounts", middleware.AuthMiddleware(http.HandlerFunc(handler.GetAllAccountsHandler())))
-	mux.HandleFunc("GET /accounts/", handler.GetAccountHandler())
-	mux.HandleFunc("PUT /accounts/", handler.UpdateAccountHandler())
-	mux.HandleFunc("DELETE /accounts/", handler.DeleteAccountHandler())
+	authMiddleware := middleware.AuthMiddleware(accountRepo)
+
+	mux.Handle("POST /accounts", http.HandlerFunc(handler.CreateAccountHandler()))
+	mux.Handle("GET /accounts", authMiddleware(http.HandlerFunc(handler.GetAllAccountsHandler())))
+	mux.Handle("GET /accounts/{id}", authMiddleware(http.HandlerFunc(handler.GetAccountHandler())))
+	mux.Handle("PUT /accounts/{id}", authMiddleware(http.HandlerFunc(handler.UpdateAccountHandler())))
+	mux.Handle("DELETE /accounts/{id}", authMiddleware(http.HandlerFunc(handler.DeleteAccountHandler())))
 }

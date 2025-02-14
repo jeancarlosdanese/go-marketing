@@ -49,3 +49,6 @@ main.exe
 /deploy
 /deploy/
 /deploy/*
+
+.air.toml
+./.air.toml
