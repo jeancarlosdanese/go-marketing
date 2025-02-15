@@ -19,6 +19,8 @@ type Config struct {
 
 // LoadConfig carrega as variáveis do .env e inicia o monitoramento
 func LoadConfig() {
+	log.Println("🔥 Carregando configurações do .env")
+
 	projectRoot, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("❌ Erro ao obter diretório de trabalho: %v", err)

@@ -9,6 +9,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	_ "github.com/lib/pq"
 )
 
@@ -20,12 +21,13 @@ var (
 // InitPostgresDB inicializa a conexão com o PostgreSQL
 func InitPostgresDB() (*sql.DB, error) {
 	var err error
+
 	oncePostgres.Do(func() {
 		dsn := getPostgresDSN() // 🔥 Obtém a string de conexão
 
 		postgresInstance, err = sql.Open("postgres", dsn)
 		if err != nil {
-			log.Fatalf("❌ Erro ao conectar ao PostgreSQL: %v", err)
+			return
 		}
 
 		// 🔥 Configuração do Pool de Conexões
@@ -33,7 +35,12 @@ func InitPostgresDB() (*sql.DB, error) {
 		postgresInstance.SetMaxIdleConns(5)
 		postgresInstance.SetConnMaxLifetime(0)
 
-		log.Println("✅ Conexão com PostgreSQL inicializada com sucesso!")
+		// 🔥 Testa a conexão
+		if err = postgresInstance.Ping(); err != nil {
+			return
+		}
+
+		logger.Info("✅ Conexão com PostgreSQL inicializada com sucesso!")
 	})
 
 	return postgresInstance, err

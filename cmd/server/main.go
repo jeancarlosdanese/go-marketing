@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,15 +21,14 @@ func main() {
 	// Carregar configurações do .env
 	config.LoadConfig()
 
-	// Inicializar logger
+	// Agora sim podemos inicializar o logger
+	logger.InitLogger()
 	log := logger.GetLogger()
-	log.Info("Configurações carregadas.")
 
 	// 🔥 Agora o banco é escolhido com base no .env (`DB_DRIVER=postgres`)
 	db, err := db.GetDatabase()
 	if err != nil {
-		fmt.Println("Erro ao conectar ao banco:", err)
-		os.Exit(1)
+		logger.Fatal("Erro ao conectar ao banco de dados", err)
 	}
 	defer db.Close() // 🔌 Fecha a conexão corretamente ao encerrar a aplicação
 

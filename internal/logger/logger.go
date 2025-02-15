@@ -32,29 +32,73 @@ import (
 	"log/slog"
 	"os"
 	"strings"
-	"sync"
 )
 
-// Logger é a estrutura do sistema de logs
-var log *slog.Logger
-var once sync.Once
+// Ícones associados a cada nível de log
+var logIcons = map[slog.Leveler]string{
+	slog.LevelDebug: "🐛 DEBUG:",
+	slog.LevelInfo:  "ℹ️ INFO:",
+	slog.LevelWarn:  "⚠️ WARN:",
+	slog.LevelError: "❌ ERROR:",
+}
 
-// GetLogger retorna uma instância única do logger
+var logInstance *slog.Logger
+
+// InitLogger deve ser chamado após carregar as configurações do ambiente
+func InitLogger() {
+	// Define o nível de log com base no APP_MODE
+	level := slog.LevelInfo
+	if strings.Contains(os.Getenv("APP_MODE"), "dev") {
+		level = slog.LevelDebug
+	}
+
+	// Definir saída JSON ou texto legível com base no ambiente
+	var handler slog.Handler
+	if os.Getenv("LOG_FORMAT") == "json" {
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})
+	} else {
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})
+	}
+
+	logInstance = slog.New(handler)
+}
+
+// GetLogger retorna o logger configurado
 func GetLogger() *slog.Logger {
-	once.Do(func() {
-		// Verificar se `APP_DEBUG` está ativado
-		logLevel := slog.LevelInfo // Padrão (INFO, WARN, ERROR, FATAL)
-		if strings.Contains(os.Getenv("APP_MODE"), "dev") {
-			logLevel = slog.LevelDebug // Ativar logs de DEBUG se APP_DEBUG=true
-		}
+	if logInstance == nil {
+		InitLogger() // Garante que o logger está inicializado
+	}
+	return logInstance
+}
 
-		// Criar um handler apenas para o console
-		consoleHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: logLevel,
-		})
+// Debug loga mensagens de debug (aparecem apenas se APP_MODE for "dev")
+func Debug(msg string, args ...any) {
+	logInstance.Debug(logIcons[slog.LevelDebug]+" "+msg, args...)
+}
 
-		// Criar logger
-		log = slog.New(consoleHandler)
-	})
-	return log
+// Info loga mensagens informativas
+func Info(msg string, args ...any) {
+	logInstance.Info(logIcons[slog.LevelInfo]+" "+msg, args...)
+}
+
+// Warn loga avisos
+func Warn(msg string, args ...any) {
+	logInstance.Warn(logIcons[slog.LevelWarn]+" "+msg, args...)
+}
+
+// Error loga erros
+func Error(msg string, err error, args ...any) {
+	logInstance.Error(logIcons[slog.LevelError]+" "+msg, append(args, "error", err.Error())...)
+}
+
+// Fatal loga erro fatal e encerra o programa
+func Fatal(msg string, err error, args ...any) {
+	logInstance.Error("💀 FATAL ERROR: "+msg, append(args, "error", err.Error())...)
+	os.Exit(1) // Encerra o programa
+}
+
+// Panic loga erro crítico e faz panic
+func Panic(msg string, err error, args ...any) {
+	logInstance.Error("🔥 PANIC ERROR: "+msg, append(args, "error", err.Error())...)
+	panic(msg) // Dispara um panic
 }
