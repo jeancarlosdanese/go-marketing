@@ -76,10 +76,9 @@ func (h *accountHandle) CreateAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		h.log.Info("Conta criada com sucesso", "account_id", createdAccount.ID.String(), "email", createdAccount.Email)
-
 		response := dto.NewAccountResponseDTO(createdAccount)
 
+		h.log.Info("Conta criada com sucesso", "account_id", createdAccount.ID.String(), "email", createdAccount.Email)
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(response)
 	}
@@ -152,7 +151,6 @@ func (h *accountHandle) GetAccountHandler() http.HandlerFunc {
 		}
 
 		h.log.Debug("Conta encontrada", "account_id", id.String())
-
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(dto.NewAccountResponseDTO(account))
 	}
@@ -205,7 +203,6 @@ func (h *accountHandle) UpdateAccountHandler() http.HandlerFunc {
 		}
 
 		h.log.Info("Conta atualizada com sucesso", "account_id", updatedAccount.ID.String())
-
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(dto.NewAccountResponseDTO(updatedAccount))
 	}
@@ -235,18 +232,15 @@ func (h *accountHandle) DeleteAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		deletedID, err := h.repo.DeleteByID(id)
+		err = h.repo.DeleteByID(id)
 		if err != nil {
 			h.log.Error("Erro ao deletar conta", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao deletar conta")
 			return
 		}
 
-		h.log.Info("Conta deletada", "account_id", deletedID.String())
-
+		h.log.Info("Conta deletada", "account_id", id.String())
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"deleted_id": deletedID,
-		})
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

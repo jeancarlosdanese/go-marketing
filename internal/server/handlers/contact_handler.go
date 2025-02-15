@@ -1,0 +1,290 @@
+// File: /internal/server/handlers/contact_handler.go
+
+package handlers
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jeancarlosdanese/go-marketing/internal/db"
+	"github.com/jeancarlosdanese/go-marketing/internal/dto"
+	"github.com/jeancarlosdanese/go-marketing/internal/logger"
+	"github.com/jeancarlosdanese/go-marketing/internal/middleware"
+	"github.com/jeancarlosdanese/go-marketing/internal/models"
+	"github.com/jeancarlosdanese/go-marketing/internal/utils"
+)
+
+type ContactHandle interface {
+	CreateContactHandler() http.HandlerFunc
+	GetAllContactsHandler() http.HandlerFunc
+	GetContactHandler() http.HandlerFunc
+	UpdateContactHandler() http.HandlerFunc
+	DeleteContactHandler() http.HandlerFunc
+}
+
+type contactHandle struct {
+	log  *slog.Logger
+	repo db.ContactRepository
+}
+
+func NewContactHandle(repo db.ContactRepository) ContactHandle {
+	return &contactHandle{
+		log:  logger.GetLogger(),
+		repo: repo,
+	}
+}
+
+// 📌 Criar Contato
+func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var contactDTO dto.ContactCreateDTO
+
+		// 📝 Decodificar JSON
+		if err := json.NewDecoder(r.Body).Decode(&contactDTO); err != nil {
+			h.log.Warn("Erro ao decodificar JSON", "error", err)
+			utils.SendError(w, http.StatusBadRequest, "Erro ao processar requisição")
+			return
+		}
+		defer r.Body.Close()
+
+		// 🔍 Buscar conta autenticada
+		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
+		if !ok {
+			return
+		}
+
+		// Definir AccountID como a conta autenticada
+		contactDTO.AccountID = authAccount.ID
+
+		// 🔍 Validar DTO
+		if err := contactDTO.Validate(); err != nil {
+			h.log.Warn("Erro de validação", "error", err.Error())
+			utils.SendError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// 📌 Criar o modelo de contato
+		contact := &models.Contact{
+			AccountID: contactDTO.AccountID,
+			Name:      contactDTO.Name,
+			Email:     contactDTO.Email,
+			WhatsApp:  contactDTO.WhatsApp,
+			Gender:    contactDTO.Gender,
+			History:   contactDTO.History,
+		}
+
+		if contactDTO.BirthDate != nil {
+			birthDate, err := time.Parse(time.DateOnly, *contactDTO.BirthDate)
+			if err != nil {
+				h.log.Warn("Data de nascimento inválida", "error", err)
+				utils.SendError(w, http.StatusBadRequest, "Data de nascimento inválida")
+				return
+			}
+			contact.BirthDate = &birthDate
+		}
+
+		// 📌 Criar contato no banco de dados
+		createdContact, err := h.repo.Create(contact)
+		if err != nil {
+			h.log.Error("Erro ao criar contato", "error", err)
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao criar contato")
+			return
+		}
+
+		h.log.Info("Contato criado com sucesso", "id", createdContact.ID)
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(dto.NewContactResponseDTO(createdContact))
+	}
+}
+
+// 📌 Buscar todos os contatos da conta autenticada
+func (h *contactHandle) GetAllContactsHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 🔍 Buscar conta autenticada
+		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
+		if !ok {
+			return
+		}
+
+		// 📌 Buscar contatos da conta autenticada
+		contacts, err := h.repo.GetByAccountID(authAccount.ID)
+		if err != nil {
+			h.log.Error("Erro ao buscar contatos", "error", err)
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar contatos")
+			return
+		}
+
+		// 📌 Criar resposta DTO
+		var response []dto.ContactResponseDTO
+		for _, contact := range contacts {
+			response = append(response, dto.NewContactResponseDTO(&contact))
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+	}
+}
+
+// 📌 Buscar um contato específico
+func (h *contactHandle) GetContactHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 🔍 Buscar conta autenticada
+		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
+		if !ok {
+			return
+		}
+
+		// 📌 Capturar `contact_id` da URL
+		contactID, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			h.log.Warn("ID inválido informado", "contact_id", r.PathValue("id"))
+			utils.SendError(w, http.StatusBadRequest, "ID inválido")
+			return
+		}
+
+		// 📌 Buscar contato
+		contact, err := h.repo.GetByID(contactID)
+		if err != nil || contact == nil {
+			h.log.Warn("Contato não encontrado", "contact_id", contactID)
+			utils.SendError(w, http.StatusNotFound, "Contato não encontrado")
+			return
+		}
+
+		// 📌 Verificar se o contato pertence ao usuário autenticado
+		if contact.AccountID != authAccount.ID {
+			h.log.Warn("Usuário tentou acessar contato de outra conta", "user_id", authAccount.ID, "contact_id", contactID)
+			utils.SendError(w, http.StatusForbidden, "Acesso negado")
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(dto.NewContactResponseDTO(contact))
+	}
+}
+
+// 📌 Atualizar contato
+func (h *contactHandle) UpdateContactHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var contactDTO dto.ContactUpdateDTO
+
+		// 📝 Decodificar JSON
+		if err := json.NewDecoder(r.Body).Decode(&contactDTO); err != nil {
+			h.log.Warn("Erro ao decodificar JSON", "error", err)
+			utils.SendError(w, http.StatusBadRequest, "Erro ao processar requisição")
+			return
+		}
+		defer r.Body.Close()
+
+		// 🔍 Buscar conta autenticada
+		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
+		if !ok {
+			return
+		}
+
+		// 📌 Capturar `contact_id` da URL
+		contactID, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			h.log.Warn("ID inválido informado", "contact_id", r.PathValue("id"))
+			utils.SendError(w, http.StatusBadRequest, "ID inválido")
+			return
+		}
+
+		// 📌 Buscar contato no banco
+		contact, err := h.repo.GetByID(contactID)
+		if err != nil || contact == nil {
+			h.log.Warn("Contato não encontrado", "contact_id", contactID)
+			utils.SendError(w, http.StatusNotFound, "Contato não encontrado")
+			return
+		}
+
+		// 📌 Verificar se pertence ao usuário autenticado
+		if contact.AccountID != authAccount.ID {
+			h.log.Warn("Usuário tentou atualizar contato de outra conta", "user_id", authAccount.ID, "contact_id", contactID)
+			utils.SendError(w, http.StatusForbidden, "Acesso negado")
+			return
+		}
+
+		// 📌 Atualizar os campos informados
+		if contactDTO.Name != nil {
+			contact.Name = *contactDTO.Name
+		}
+		if contactDTO.Email != nil {
+			contact.Email = *contactDTO.Email
+		}
+		if contactDTO.WhatsApp != nil {
+			contact.WhatsApp = utils.FormatWhatsApp(*contactDTO.WhatsApp)
+		}
+		if contactDTO.BirthDate != nil {
+			birthDate, err := time.Parse(time.DateOnly, *contactDTO.BirthDate)
+			if err != nil {
+				h.log.Warn("Data de nascimento inválida", "error", err)
+				utils.SendError(w, http.StatusBadRequest, "Data de nascimento inválida")
+				return
+			}
+			contact.BirthDate = &birthDate
+		}
+		if contactDTO.OptOut != nil && *contactDTO.OptOut {
+			now := time.Now()
+			contact.OptOutAt = &now
+		}
+
+		// 📌 Salvar atualização
+		updatedContact, err := h.repo.UpdateByID(contactID, contact)
+		if err != nil {
+			h.log.Error("Erro ao atualizar contato", "error", err)
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar contato")
+			return
+		}
+
+		h.log.Info("Contato atualizado com sucesso", "contact_id", contactID)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(dto.NewContactResponseDTO(updatedContact))
+	}
+}
+
+// 📌 Deletar contato
+func (h *contactHandle) DeleteContactHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 🔍 Buscar conta autenticada
+		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
+		if !ok {
+			return
+		}
+
+		// 📌 Capturar `contact_id` da URL
+		contactID, err := uuid.Parse(r.PathValue("id"))
+		if err != nil {
+			h.log.Warn("ID inválido informado", "contact_id", r.PathValue("id"))
+			utils.SendError(w, http.StatusBadRequest, "ID inválido")
+			return
+		}
+
+		// 📌 Buscar contato no banco
+		contact, err := h.repo.GetByID(contactID)
+		if err != nil || contact == nil {
+			h.log.Warn("Contato não encontrado", "contact_id", contactID)
+			utils.SendError(w, http.StatusNotFound, "Contato não encontrado")
+			return
+		}
+
+		// 📌 Verificar se pertence ao usuário autenticado
+		if contact.AccountID != authAccount.ID {
+			h.log.Warn("Usuário tentou deletar contato de outra conta", "user_id", authAccount.ID, "contact_id", contactID)
+			utils.SendError(w, http.StatusForbidden, "Acesso negado")
+			return
+		}
+
+		// 📌 Deletar contato
+		if err := h.repo.DeleteByID(contactID); err != nil {
+			h.log.Error("Erro ao deletar contato", "error", err)
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao deletar contato")
+			return
+		}
+
+		h.log.Info("Contato deletado com sucesso", "contact_id", contactID)
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

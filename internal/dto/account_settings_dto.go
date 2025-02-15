@@ -4,10 +4,10 @@ package dto
 
 import (
 	"errors"
-	"regexp"
 
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
+	"github.com/jeancarlosdanese/go-marketing/internal/utils"
 )
 
 // AccountSettingsCreateDTO define os dados necessários para criar configurações de uma conta
@@ -82,13 +82,13 @@ func (a *AccountSettingsCreateDTO) Validate(isAdmin bool) error {
 		return errors.New("se mail_admin_to for definido, mail_from também deve ser")
 	}
 
-	if err := validateAWSRegion(a.AWSRegion); err != nil {
+	if err := utils.ValidateAWSRegion(a.AWSRegion); err != nil {
 		return err
 	}
-	if err := validateEmail(a.MailFrom); err != nil {
+	if err := utils.ValidateEmail(a.MailFrom); err != nil {
 		return errors.New("MailFrom inválido: " + err.Error())
 	}
-	if err := validateEmail(a.MailAdminTo); err != nil {
+	if err := utils.ValidateEmail(a.MailAdminTo); err != nil {
 		return errors.New("MailAdminTo inválido: " + err.Error())
 	}
 	return nil
@@ -109,50 +109,19 @@ func (a *AccountSettingsUpdateDTO) Validate(isAdmin bool) error {
 
 	// Validações adicionais
 	if a.AWSRegion != nil && *a.AWSRegion != "" {
-		if err := validateAWSRegion(*a.AWSRegion); err != nil {
+		if err := utils.ValidateAWSRegion(*a.AWSRegion); err != nil {
 			return err
 		}
 	}
 	if a.MailFrom != nil && *a.MailFrom != "" {
-		if err := validateEmail(*a.MailFrom); err != nil {
+		if err := utils.ValidateEmail(*a.MailFrom); err != nil {
 			return errors.New("MailFrom inválido: " + err.Error())
 		}
 	}
 	if a.MailAdminTo != nil && *a.MailAdminTo != "" {
-		if err := validateEmail(*a.MailAdminTo); err != nil {
+		if err := utils.ValidateEmail(*a.MailAdminTo); err != nil {
 			return errors.New("MailAdminTo inválido: " + err.Error())
 		}
-	}
-	return nil
-}
-
-// validateAWSRegion valida o código da região AWS
-func validateAWSRegion(region string) error {
-	if region == "" {
-		return nil
-	}
-
-	validRegions := map[string]bool{
-		"us-east-1": true, "us-west-1": true, "us-west-2": true, "eu-west-1": true,
-		"eu-central-1": true, "ap-southeast-1": true, "ap-southeast-2": true,
-		"ap-northeast-1": true, "sa-east-1": true,
-	}
-
-	if !validRegions[region] {
-		return errors.New("região AWS inválida")
-	}
-	return nil
-}
-
-// validateEmail valida o formato do e-mail
-func validateEmail(email string) error {
-	if email == "" {
-		return nil
-	}
-
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	if !emailRegex.MatchString(email) {
-		return errors.New("formato de e-mail inválido")
 	}
 	return nil
 }

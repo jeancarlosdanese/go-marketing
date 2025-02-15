@@ -84,8 +84,7 @@ func (h *accountSettingsHandle) CreateAccountSettingsHandler() http.HandlerFunc 
 			return
 		}
 
-		h.log.Debug("Configurações criadas com sucesso", "account_id", createdSettings.AccountID)
-
+		h.log.Info("Configurações criadas com sucesso", "account_id", createdSettings.AccountID)
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(dto.NewAccountSettingsResponseDTO(createdSettings))
 	}
@@ -279,7 +278,6 @@ func (h *accountSettingsHandle) DeleteAccountSettingsHandler() http.HandlerFunc 
 		}
 
 		h.log.Info("Configurações deletadas com sucesso", "account_id", authAccount.ID)
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "Configurações removidas com sucesso"})
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

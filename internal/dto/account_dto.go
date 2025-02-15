@@ -4,10 +4,10 @@ package dto
 
 import (
 	"errors"
-	"fmt"
 	"regexp"
 
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
+	"github.com/jeancarlosdanese/go-marketing/internal/utils"
 )
 
 // AccountCreateDTO define os campos necessários para criar uma conta
@@ -38,7 +38,7 @@ func NewAccountResponseDTO(account *models.Account) AccountResponseDTO {
 		ID:       account.ID.String(),
 		Name:     account.Name,
 		Email:    account.Email,
-		WhatsApp: formatWhatsApp(account.WhatsApp),
+		WhatsApp: utils.FormatWhatsApp(account.WhatsApp),
 	}
 }
 
@@ -92,18 +92,4 @@ func (a *AccountUpdateDTO) Validate() error {
 	}
 
 	return nil
-}
-
-// formatWhatsApp formata o número do WhatsApp para exibição no padrão brasileiro e internacional
-func formatWhatsApp(number string) string {
-	switch len(number) {
-	case 10: // Exemplo: "4999999999" (sem código do país)
-		return fmt.Sprintf("+55 (%s) %s-%s", number[:2], number[2:6], number[6:])
-	case 12: // Exemplo: "554999999999" (com código do país)
-		return fmt.Sprintf("+%s (%s) %s-%s", number[:2], number[2:4], number[4:8], number[8:])
-	case 13: // Exemplo: "5511999999999" (com código do país)
-		return fmt.Sprintf("+%s (%s) %s-%s", number[:2], number[2:4], number[4:9], number[9:])
-	default:
-		return number // Retorna como está caso o formato não seja reconhecido
-	}
 }

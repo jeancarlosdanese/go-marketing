@@ -126,7 +126,7 @@ func (r *AccountRepoPostgres) UpdateByID(id uuid.UUID, jsonData []byte) (*models
 }
 
 // DeleteByID remove uma conta pelo ID
-func (r *AccountRepoPostgres) DeleteByID(id uuid.UUID) (uuid.UUID, error) {
+func (r *AccountRepoPostgres) DeleteByID(id uuid.UUID) error {
 	r.log.Debug("Deletando conta", "id", id)
 
 	query := "DELETE FROM accounts WHERE id = $1 RETURNING id"
@@ -135,10 +135,10 @@ func (r *AccountRepoPostgres) DeleteByID(id uuid.UUID) (uuid.UUID, error) {
 	err := r.db.QueryRow(query, id).Scan(&deletedID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return uuid.Nil, errors.New("conta não encontrada")
+			return errors.New("conta não encontrada")
 		}
-		return uuid.Nil, err
+		return err
 	}
 
-	return deletedID, nil
+	return nil
 }

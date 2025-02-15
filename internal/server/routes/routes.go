@@ -10,7 +10,12 @@ import (
 )
 
 // NewRouter cria e retorna um roteador HTTP configurado.
-func NewRouter(otpRepo db.AccountOTPRepository, accountRepo db.AccountRepository, accountSettingsRepo db.AccountSettingsRepository) *http.ServeMux {
+func NewRouter(
+	otpRepo db.AccountOTPRepository,
+	accountRepo db.AccountRepository,
+	accountSettingsRepo db.AccountSettingsRepository,
+	contactRepo db.ContactRepository,
+) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// 🔥 Criar middlewares
@@ -20,6 +25,7 @@ func NewRouter(otpRepo db.AccountOTPRepository, accountRepo db.AccountRepository
 	RegisterAuthRoutes(mux, otpRepo)
 	RegisterAccountRoutes(mux, authMiddleware, accountRepo)
 	RegisterAccountSettingsRoutes(mux, authMiddleware, accountSettingsRepo)
+	RegisterContactRoutes(mux, authMiddleware, contactRepo)
 
 	// 🔥 Rota de Health Check
 	mux.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

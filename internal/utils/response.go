@@ -1,13 +1,5 @@
 // File: /internal/utils/response.go
 
-// Package utils é responsável por criar respostas padronizadas para a API
-// O pacote funções para criar respostas padronizadas:
-// - SendError: envia um erro JSON padronizado
-// Para utilizar o pacote, basta importar o pacote e chamar a função desejada.
-// Exemplo:
-//
-//	utils.SendError(w, http.StatusNotFound, "Recurso não encontrado")
-
 package utils
 
 import (
