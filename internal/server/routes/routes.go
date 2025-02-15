@@ -1,4 +1,6 @@
-package server
+// File: /internal/server/routes/routes.go
+
+package routes
 
 import (
 	"net/http"
@@ -8,15 +10,16 @@ import (
 )
 
 // NewRouter cria e retorna um roteador HTTP configurado.
-func NewRouter(accountRepo db.AccountRepository, otpRepo db.AccountOTPRepository) *http.ServeMux {
+func NewRouter(otpRepo db.AccountOTPRepository, accountRepo db.AccountRepository, accountSettingsRepo db.AccountSettingsRepository) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// 🔥 Criar middlewares
 	authMiddleware := middleware.AuthMiddleware(accountRepo)
 
 	// 🔥 Registrar rotas principais
-	RegisterAccountRoutes(mux, authMiddleware, accountRepo)
 	RegisterAuthRoutes(mux, otpRepo)
+	RegisterAccountRoutes(mux, authMiddleware, accountRepo)
+	RegisterAccountSettingsRoutes(mux, authMiddleware, accountSettingsRepo)
 
 	// 🔥 Rota de Health Check
 	mux.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

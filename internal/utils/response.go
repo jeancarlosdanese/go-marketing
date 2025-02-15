@@ -1,14 +1,14 @@
-// File: internal/server/handlers/response.go
+// File: /internal/utils/response.go
 
-// Package handlers é responsável por criar respostas padronizadas para a API
+// Package utils é responsável por criar respostas padronizadas para a API
 // O pacote funções para criar respostas padronizadas:
 // - SendError: envia um erro JSON padronizado
 // Para utilizar o pacote, basta importar o pacote e chamar a função desejada.
 // Exemplo:
 //
-//	handlers.SendError(w, http.StatusNotFound, "Recurso não encontrado")
+//	utils.SendError(w, http.StatusNotFound, "Recurso não encontrado")
 
-package handlers
+package utils
 
 import (
 	"encoding/json"

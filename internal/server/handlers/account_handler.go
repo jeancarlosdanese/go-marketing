@@ -14,6 +14,7 @@ import (
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/middleware"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
+	"github.com/jeancarlosdanese/go-marketing/internal/utils"
 )
 
 type AccountHandle interface {
@@ -45,7 +46,7 @@ func (h *accountHandle) CreateAccountHandler() http.HandlerFunc {
 
 		if err := json.NewDecoder(r.Body).Decode(&accountDTO); err != nil {
 			h.log.Warn("Erro ao decodificar JSON", "error", err)
-			SendError(w, http.StatusBadRequest, "Erro ao processar requisição")
+			utils.SendError(w, http.StatusBadRequest, "Erro ao processar requisição")
 			return
 		}
 		defer r.Body.Close()
@@ -54,7 +55,7 @@ func (h *accountHandle) CreateAccountHandler() http.HandlerFunc {
 
 		if err := accountDTO.Validate(); err != nil {
 			h.log.Warn("Erro de validação", "error", err.Error())
-			SendError(w, http.StatusBadRequest, err.Error())
+			utils.SendError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
@@ -68,9 +69,9 @@ func (h *accountHandle) CreateAccountHandler() http.HandlerFunc {
 		if err != nil {
 			h.log.Error("Erro ao criar conta", "error", err)
 			if strings.Contains(err.Error(), "duplicate key value") {
-				SendError(w, http.StatusConflict, "E-mail ou WhatsApp já cadastrado")
+				utils.SendError(w, http.StatusConflict, "E-mail ou WhatsApp já cadastrado")
 			} else {
-				SendError(w, http.StatusInternalServerError, "Erro ao criar conta")
+				utils.SendError(w, http.StatusInternalServerError, "Erro ao criar conta")
 			}
 			return
 		}
@@ -90,20 +91,20 @@ func (h *accountHandle) GetAllAccountsHandler() http.HandlerFunc {
 		authAccount, ok := middleware.GetAuthenticatedAccount(r.Context())
 		if !ok {
 			h.log.Error("Conta não encontrada no contexto")
-			SendError(w, http.StatusInternalServerError, "Conta não encontrada no contexto")
+			utils.SendError(w, http.StatusInternalServerError, "Conta não encontrada no contexto")
 			return
 		}
 
 		if !authAccount.IsAdmin() {
 			h.log.Warn("Apenas administradores podem buscar todas as contas")
-			SendError(w, http.StatusForbidden, "Apenas administradores podem buscar todas as contas")
+			utils.SendError(w, http.StatusForbidden, "Apenas administradores podem buscar todas as contas")
 			return
 		}
 
 		accounts, err := h.repo.GetAll()
 		if err != nil {
 			h.log.Error("Erro ao buscar contas", "error", err)
-			SendError(w, http.StatusInternalServerError, "Erro ao buscar contas")
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar contas")
 			return
 		}
 
@@ -125,7 +126,7 @@ func (h *accountHandle) GetAccountHandler() http.HandlerFunc {
 		authAccount, ok := middleware.GetAuthenticatedAccount(r.Context())
 		if !ok {
 			h.log.Error("Conta não encontrada no contexto")
-			SendError(w, http.StatusInternalServerError, "Conta não encontrada no contexto")
+			utils.SendError(w, http.StatusInternalServerError, "Conta não encontrada no contexto")
 			return
 		}
 
@@ -133,20 +134,20 @@ func (h *accountHandle) GetAccountHandler() http.HandlerFunc {
 		id, err := uuid.Parse(accountID)
 		if err != nil {
 			h.log.Warn("ID inválido", "error", err)
-			SendError(w, http.StatusBadRequest, "ID inválido")
+			utils.SendError(w, http.StatusBadRequest, "ID inválido")
 			return
 		}
 
 		if !authAccount.IsAdmin() && authAccount.ID != id {
 			h.log.Warn("Apenas administradores podem buscar outras contas")
-			SendError(w, http.StatusForbidden, "Apenas administradores podem buscar outras contas")
+			utils.SendError(w, http.StatusForbidden, "Apenas administradores podem buscar outras contas")
 			return
 		}
 
 		account, err := h.repo.GetByID(id)
 		if err != nil {
 			h.log.Warn("Conta não encontrada", "account_id", id.String())
-			SendError(w, http.StatusNotFound, "Conta não encontrada")
+			utils.SendError(w, http.StatusNotFound, "Conta não encontrada")
 			return
 		}
 
@@ -163,7 +164,7 @@ func (h *accountHandle) UpdateAccountHandler() http.HandlerFunc {
 		authAccount, ok := middleware.GetAuthenticatedAccount(r.Context())
 		if !ok {
 			h.log.Error("Conta não encontrada no contexto")
-			SendError(w, http.StatusInternalServerError, "Conta não encontrada no contexto")
+			utils.SendError(w, http.StatusInternalServerError, "Conta não encontrada no contexto")
 			return
 		}
 
@@ -171,27 +172,27 @@ func (h *accountHandle) UpdateAccountHandler() http.HandlerFunc {
 		id, err := uuid.Parse(accountID)
 		if err != nil {
 			h.log.Warn("ID inválido", "error", err)
-			SendError(w, http.StatusBadRequest, "ID inválido")
+			utils.SendError(w, http.StatusBadRequest, "ID inválido")
 			return
 		}
 
 		var updateDTO dto.AccountUpdateDTO
 		if err := json.NewDecoder(r.Body).Decode(&updateDTO); err != nil {
 			h.log.Warn("Erro ao decodificar JSON", "error", err)
-			SendError(w, http.StatusBadRequest, "Erro ao processar requisição")
+			utils.SendError(w, http.StatusBadRequest, "Erro ao processar requisição")
 			return
 		}
 		defer r.Body.Close()
 
 		if !authAccount.IsAdmin() && authAccount.ID != id {
 			h.log.Warn("Apenas administradores podem atualizar outras contas")
-			SendError(w, http.StatusForbidden, "Apenas administradores podem atualizar outras contas")
+			utils.SendError(w, http.StatusForbidden, "Apenas administradores podem atualizar outras contas")
 			return
 		}
 
 		if err := updateDTO.Validate(); err != nil {
 			h.log.Warn("Erro de validação", "error", err.Error())
-			SendError(w, http.StatusBadRequest, err.Error())
+			utils.SendError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
@@ -199,7 +200,7 @@ func (h *accountHandle) UpdateAccountHandler() http.HandlerFunc {
 		updatedAccount, err := h.repo.UpdateByID(id, updateData)
 		if err != nil {
 			h.log.Error("Erro ao atualizar conta", "error", err)
-			SendError(w, http.StatusInternalServerError, "Erro ao atualizar conta")
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar conta")
 			return
 		}
 
@@ -216,7 +217,7 @@ func (h *accountHandle) DeleteAccountHandler() http.HandlerFunc {
 		authAccount, ok := middleware.GetAuthenticatedAccount(r.Context())
 		if !ok {
 			h.log.Error("Conta não encontrada no contexto")
-			SendError(w, http.StatusInternalServerError, "Conta não encontrada no contexto")
+			utils.SendError(w, http.StatusInternalServerError, "Conta não encontrada no contexto")
 			return
 		}
 
@@ -224,20 +225,20 @@ func (h *accountHandle) DeleteAccountHandler() http.HandlerFunc {
 		id, err := uuid.Parse(accountID)
 		if err != nil {
 			h.log.Warn("ID inválido", "error", err)
-			SendError(w, http.StatusBadRequest, "ID inválido")
+			utils.SendError(w, http.StatusBadRequest, "ID inválido")
 			return
 		}
 
 		if !authAccount.IsAdmin() {
 			h.log.Warn("Apenas administradores podem deletar contas")
-			SendError(w, http.StatusForbidden, "Apenas administradores podem deletar contas")
+			utils.SendError(w, http.StatusForbidden, "Apenas administradores podem deletar contas")
 			return
 		}
 
 		deletedID, err := h.repo.DeleteByID(id)
 		if err != nil {
 			h.log.Error("Erro ao deletar conta", "error", err)
-			SendError(w, http.StatusInternalServerError, "Erro ao deletar conta")
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao deletar conta")
 			return
 		}
 

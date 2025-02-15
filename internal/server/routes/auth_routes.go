@@ -1,6 +1,6 @@
-// File: internal/server/auth_routes.go
+// File: internal/server/routes/auth_routes.go
 
-package server
+package routes
 
 import (
 	"net/http"

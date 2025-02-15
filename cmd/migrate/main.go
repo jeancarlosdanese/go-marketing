@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeancarlosdanese/go-marketing/config"
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
+	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 )
 
 func main() {
@@ -16,16 +17,18 @@ func main() {
 	// Carregar configurações do .env
 	config.LoadConfig()
 
-	// Inicializar o banco
-	dbInstance, err := db.InitPostgresDB()
+	// Agora sim podemos inicializar o logger
+	logger.InitLogger()
+
+	// 🔥 Agora o banco é escolhido com base no .env (`DB_DRIVER=postgres`)
+	dbConn, err := db.GetDatabase()
 	if err != nil {
-		fmt.Println("❌ Erro ao conectar ao banco:", err)
-		os.Exit(1)
+		logger.Fatal("Erro ao conectar ao banco de dados", err)
 	}
-	defer dbInstance.Close()
+	defer dbConn.Close() // 🔌 Fecha a conexão corretamente ao encerrar a aplicação
 
 	// Aplicar migrations
-	err = db.ApplyMigrations(dbInstance)
+	err = db.ApplyMigrations(dbConn)
 	if err != nil {
 		fmt.Println("❌ Erro ao aplicar migrations:", err)
 		os.Exit(1)

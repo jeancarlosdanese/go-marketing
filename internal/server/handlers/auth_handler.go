@@ -1,4 +1,4 @@
-// File: internal/server/handlers/auth_handler.go
+// File: /internal/server/handlers/auth_handler.go
 
 package handlers
 

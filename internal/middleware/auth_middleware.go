@@ -4,12 +4,14 @@ package middleware
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/auth"
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
+	"github.com/jeancarlosdanese/go-marketing/internal/utils"
 )
 
 // contextKeyAccount é uma chave única para armazenar a conta no contexto
@@ -59,4 +61,16 @@ func AuthMiddleware(accountRepo db.AccountRepository) func(http.Handler) http.Ha
 func GetAuthenticatedAccount(ctx context.Context) (*models.Account, bool) {
 	account, ok := ctx.Value(AuthAccountKey).(*models.Account)
 	return account, ok
+}
+
+// GetAuthAccountOrFail retorna a conta autenticada ou responde com erro caso não exista
+func GetAuthAccountOrFail(ctx context.Context, w http.ResponseWriter, log *slog.Logger) (*models.Account, bool) {
+	authAccount, ok := GetAuthenticatedAccount(ctx)
+	if !ok {
+		log.Error("Conta não encontrada no contexto")
+		utils.SendError(w, http.StatusInternalServerError, "Conta não encontrada no contexto")
+		return nil, false
+	}
+
+	return authAccount, true
 }
