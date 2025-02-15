@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -37,8 +38,9 @@ func main() {
 	otpRepo := postgres.NewAccountOTPRepository(db)
 
 	// Criar o servidor HTTP
+	port := os.Getenv("APP_PORT")
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    fmt.Sprintf(":%s", port),
 		Handler: server.NewRouter(accountRepo, otpRepo),
 	}
 
