@@ -15,6 +15,7 @@ func NewRouter(
 	accountRepo db.AccountRepository,
 	accountSettingsRepo db.AccountSettingsRepository,
 	contactRepo db.ContactRepository,
+	templateRepo db.TemplateRepository,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -26,6 +27,7 @@ func NewRouter(
 	RegisterAccountRoutes(mux, authMiddleware, accountRepo)
 	RegisterAccountSettingsRoutes(mux, authMiddleware, accountSettingsRepo)
 	RegisterContactRoutes(mux, authMiddleware, contactRepo)
+	RegisterTemplateRoutes(mux, authMiddleware, templateRepo)
 
 	// 🔥 Rota de Health Check
 	mux.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

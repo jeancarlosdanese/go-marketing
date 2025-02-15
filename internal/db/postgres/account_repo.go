@@ -36,11 +36,9 @@ func NewAccountRepository(db *sql.DB) db.AccountRepository {
 func (r *AccountRepoPostgres) Create(account *models.Account) (*models.Account, error) {
 	r.log.Debug("Criando nova conta", "name", account.Name, "email", account.Email)
 
-	account.ID = uuid.New() // 🔥 Gerar UUID antes de salvar
+	query := "INSERT INTO accounts (name, email, whatsapp) VALUES ($1, $2, $3) RETURNING id"
 
-	query := "INSERT INTO accounts (id, name, email, whatsapp) VALUES ($1, $2, $3, $4) RETURNING id"
-
-	err := r.db.QueryRow(query, account.ID, account.Name, account.Email, account.WhatsApp).Scan(&account.ID)
+	err := r.db.QueryRow(query, account.Name, account.Email, account.WhatsApp).Scan(&account.ID)
 	if err != nil {
 		r.log.Error("Erro ao inserir nova conta", "error", err)
 		return nil, err

@@ -38,12 +38,13 @@ func main() {
 	accountRepo := postgres.NewAccountRepository(dbConn)
 	accountSettingsRepo := postgres.NewAccountSettingsRepository(dbConn)
 	contactRepo := postgres.NewContactRepository(dbConn)
+	templateRepo := postgres.NewTemplateRepository(dbConn)
 
 	// Criar o servidor HTTP
 	port := os.Getenv("APP_PORT")
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", port),
-		Handler: routes.NewRouter(otpRepo, accountRepo, accountSettingsRepo, contactRepo),
+		Handler: routes.NewRouter(otpRepo, accountRepo, accountSettingsRepo, contactRepo, templateRepo),
 	}
 
 	// Canal para capturar sinais do sistema

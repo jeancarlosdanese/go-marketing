@@ -25,15 +25,14 @@ func NewAccountSettingsRepository(db *sql.DB) *accountSettingsRepo {
 func (r *accountSettingsRepo) Create(settings *models.AccountSettings) (*models.AccountSettings, error) {
 	query := `
 		INSERT INTO account_settings (
-			id, account_id, openai_api_key, evolution_instance, aws_access_key_id,
+			account_id, openai_api_key, evolution_instance, aws_access_key_id,
 			aws_secret_access_key, aws_region, mail_from, mail_admin_to
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id
 	`
-	settings.ID = uuid.New()
 
 	err := r.db.QueryRow(
-		query, settings.ID, settings.AccountID, settings.OpenAIAPIKey, settings.EvolutionInstance,
+		query, settings.AccountID, settings.OpenAIAPIKey, settings.EvolutionInstance,
 		settings.AWSAccessKeyID, settings.AWSSecretAccessKey, settings.AWSRegion,
 		settings.MailFrom, settings.MailAdminTo,
 	).Scan(&settings.ID)

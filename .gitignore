@@ -50,5 +50,12 @@ main.exe
 /deploy/
 /deploy/*
 
+/uploads
+/uploads/
+/uploads/*
+./uploads
+./uploads/
+./uploads/*
+
 .air.toml
 ./.air.toml

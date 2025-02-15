@@ -30,14 +30,13 @@ func (r *contactRepo) Create(contact *models.Contact) (*models.Contact, error) {
 	r.log.Debug("Criando novo contato", "name", contact.Name, "email", contact.Email)
 	query := `
 		INSERT INTO contacts (
-			id, account_id, name, email, whatsapp, gender, birth_date, history, opt_out_at, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+			account_id, name, email, whatsapp, gender, birth_date, history, opt_out_at, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
 		RETURNING id, created_at, updated_at
 	`
-	contact.ID = uuid.New()
 	err := r.db.QueryRow(
 		query,
-		contact.ID, contact.AccountID, contact.Name, contact.Email, contact.WhatsApp,
+		contact.AccountID, contact.Name, contact.Email, contact.WhatsApp,
 		contact.Gender, contact.BirthDate, contact.History, contact.OptOutAt,
 	).Scan(&contact.ID, &contact.CreatedAt, &contact.UpdatedAt)
 
