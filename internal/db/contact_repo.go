@@ -11,7 +11,7 @@ import (
 type ContactRepository interface {
 	Create(contact *models.Contact) (*models.Contact, error)
 	GetByID(contactID uuid.UUID) (*models.Contact, error)
-	GetByAccountID(accountID uuid.UUID) ([]models.Contact, error)
+	GetByAccountID(accountID uuid.UUID, filters map[string]string) ([]models.Contact, error)
 	UpdateByID(contactID uuid.UUID, contact *models.Contact) (*models.Contact, error)
 	DeleteByID(contactID uuid.UUID) error
 }

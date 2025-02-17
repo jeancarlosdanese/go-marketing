@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -28,16 +29,27 @@ func NewContactRepository(db *sql.DB) *contactRepo {
 // Create insere um novo contato no banco de dados.
 func (r *contactRepo) Create(contact *models.Contact) (*models.Contact, error) {
 	r.log.Debug("Criando novo contato", "name", contact.Name, "email", contact.Email)
+
+	// Convertendo tags para JSONB
+	tagsJSON, err := json.Marshal(contact.Tags)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao converter tags para JSON: %w", err)
+	}
+
 	query := `
 		INSERT INTO contacts (
-			account_id, name, email, whatsapp, gender, birth_date, history, opt_out_at, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+			account_id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, tags, history, opt_out_at, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
 		RETURNING id, created_at, updated_at
 	`
-	err := r.db.QueryRow(
+
+	r.log.Debug("Executando query", "query", query)
+
+	err = r.db.QueryRow(
 		query,
 		contact.AccountID, contact.Name, contact.Email, contact.WhatsApp,
-		contact.Gender, contact.BirthDate, contact.History, contact.OptOutAt,
+		contact.Gender, contact.BirthDate, contact.Bairro, contact.Cidade, contact.Estado,
+		tagsJSON, contact.History, contact.OptOutAt,
 	).Scan(&contact.ID, &contact.CreatedAt, &contact.UpdatedAt)
 
 	if err != nil {
@@ -54,13 +66,16 @@ func (r *contactRepo) GetByID(contactID uuid.UUID) (*models.Contact, error) {
 	r.log.Debug("Buscando contato por ID", "id", contactID)
 
 	query := `
-		SELECT id, account_id, name, email, whatsapp, gender, birth_date, history, opt_out_at, created_at, updated_at
+		SELECT id, account_id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, tags, history, opt_out_at, last_contact_at, created_at, updated_at
 		FROM contacts WHERE id = $1
 	`
 	contact := &models.Contact{}
+	var tagsJSON []byte
+
 	err := r.db.QueryRow(query, contactID).Scan(
 		&contact.ID, &contact.AccountID, &contact.Name, &contact.Email, &contact.WhatsApp,
-		&contact.Gender, &contact.BirthDate, &contact.History, &contact.OptOutAt,
+		&contact.Gender, &contact.BirthDate, &contact.Bairro, &contact.Cidade, &contact.Estado,
+		&tagsJSON, &contact.History, &contact.OptOutAt, &contact.LastContactAt,
 		&contact.CreatedAt, &contact.UpdatedAt,
 	)
 	if err != nil {
@@ -70,20 +85,56 @@ func (r *contactRepo) GetByID(contactID uuid.UUID) (*models.Contact, error) {
 		return nil, fmt.Errorf("erro ao buscar contato: %w", err)
 	}
 
+	// Decodificando JSONB
+	if err := json.Unmarshal(tagsJSON, &contact.Tags); err != nil {
+		r.log.Warn("Erro ao decodificar tags JSON", "id", contact.ID, "error", err)
+	}
+
 	r.log.Debug("Contato encontrado", "id", contact.ID)
 
 	return contact, nil
 }
 
-// GetByAccountID retorna todos os contatos de uma conta específica.
-func (r *contactRepo) GetByAccountID(accountID uuid.UUID) ([]models.Contact, error) {
-	r.log.Debug("Buscando contatos por account_id", "account_id", accountID)
+func (r *contactRepo) GetByAccountID(accountID uuid.UUID, filters map[string]string) ([]models.Contact, error) {
+	r.log.Debug("Buscando contatos por account_id", "account_id", accountID, "filters", filters)
 
-	query := `
-		SELECT id, account_id, name, email, whatsapp, gender, birth_date, history, opt_out_at, created_at, updated_at
-		FROM contacts WHERE account_id = $1
+	baseQuery := `
+		SELECT id, account_id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, tags, history, opt_out_at, last_contact_at, created_at, updated_at
+		FROM contacts
+		WHERE account_id = $1
 	`
-	rows, err := r.db.Query(query, accountID)
+	args := []interface{}{accountID}
+	filterIndex := 2
+
+	// 🔍 Aplicando filtros dinâmicos
+	for key, value := range filters {
+		switch key {
+		case "name", "email", "whatsapp", "cidade", "estado", "bairro":
+			baseQuery += fmt.Sprintf(" AND %s ILIKE $%d", key, filterIndex)
+			args = append(args, "%"+value+"%")
+		case "tags":
+			// Busca qualquer tag que contenha o valor passado
+			baseQuery += fmt.Sprintf(" AND tags::text ILIKE $%d", filterIndex)
+			args = append(args, "%"+value+"%")
+		case "interesses":
+			// Busca dentro da chave "interesses" do JSONB
+			baseQuery += fmt.Sprintf(" AND tags->'interesses' ? $%d", filterIndex)
+			args = append(args, value)
+		case "perfil":
+			// Busca dentro da chave "perfil" do JSONB
+			baseQuery += fmt.Sprintf(" AND tags->'perfil' ? $%d", filterIndex)
+			args = append(args, value)
+		case "eventos":
+			// Busca dentro da chave "eventos" do JSONB
+			baseQuery += fmt.Sprintf(" AND tags->'eventos' ? $%d", filterIndex)
+			args = append(args, value)
+		}
+		filterIndex++
+	}
+
+	baseQuery += " ORDER BY created_at DESC"
+
+	rows, err := r.db.Query(baseQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao buscar contatos: %w", err)
 	}
@@ -92,18 +143,24 @@ func (r *contactRepo) GetByAccountID(accountID uuid.UUID) ([]models.Contact, err
 	var contacts []models.Contact
 	for rows.Next() {
 		var contact models.Contact
+		var tagsJSON []byte
+
 		if err := rows.Scan(
 			&contact.ID, &contact.AccountID, &contact.Name, &contact.Email, &contact.WhatsApp,
-			&contact.Gender, &contact.BirthDate, &contact.History, &contact.OptOutAt,
+			&contact.Gender, &contact.BirthDate, &contact.Bairro, &contact.Cidade, &contact.Estado,
+			&tagsJSON, &contact.History, &contact.OptOutAt, &contact.LastContactAt,
 			&contact.CreatedAt, &contact.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("erro ao escanear contatos: %w", err)
 		}
+
+		// Decodificar JSONB para Tags
+		_ = json.Unmarshal(tagsJSON, &contact.Tags)
+
 		contacts = append(contacts, contact)
 	}
 
 	r.log.Debug("Contatos encontrados", "total", len(contacts))
-
 	return contacts, nil
 }
 
@@ -111,16 +168,18 @@ func (r *contactRepo) GetByAccountID(accountID uuid.UUID) ([]models.Contact, err
 func (r *contactRepo) UpdateByID(contactID uuid.UUID, contact *models.Contact) (*models.Contact, error) {
 	r.log.Debug("Atualizando contato por ID", "id", contactID)
 
+	tagsJSON, _ := json.Marshal(contact.Tags)
+
 	query := `
 		UPDATE contacts
-		SET name = $1, email = $2, whatsapp = $3, gender = $4, birth_date = $5, history = $6, opt_out_at = $7, updated_at = NOW()
-		WHERE id = $8
+		SET name = $1, email = $2, whatsapp = $3, gender = $4, birth_date = $5, bairro = $6, cidade = $7, estado = $8, tags = $9, history = $10, opt_out_at = $11, updated_at = NOW()
+		WHERE id = $12
 		RETURNING updated_at
 	`
 	err := r.db.QueryRow(
 		query,
 		contact.Name, contact.Email, contact.WhatsApp, contact.Gender, contact.BirthDate,
-		contact.History, contact.OptOutAt, contactID,
+		contact.Bairro, contact.Cidade, contact.Estado, tagsJSON, contact.History, contact.OptOutAt, contactID,
 	).Scan(&contact.UpdatedAt)
 
 	if err != nil {

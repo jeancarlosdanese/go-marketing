@@ -71,9 +71,24 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 			AccountID: contactDTO.AccountID,
 			Name:      contactDTO.Name,
 			Email:     contactDTO.Email,
-			WhatsApp:  contactDTO.WhatsApp,
+			WhatsApp:  utils.FormatWhatsApp(contactDTO.WhatsApp),
 			Gender:    contactDTO.Gender,
+			BirthDate: nil,
+			Bairro:    contactDTO.Bairro,
+			Cidade:    contactDTO.Cidade,
+			Estado:    contactDTO.Estado,
+			Tags:      contactDTO.Tags,
 			History:   contactDTO.History,
+		}
+
+		if contact.BirthDate != nil {
+			birthDate, err := time.Parse(time.DateOnly, *contactDTO.BirthDate)
+			if err != nil {
+				h.log.Warn("Data de nascimento inválida", "error", err)
+				utils.SendError(w, http.StatusBadRequest, "Data de nascimento inválida")
+				return
+			}
+			contact.BirthDate = &birthDate
 		}
 
 		if contactDTO.BirthDate != nil {
@@ -90,6 +105,10 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 		createdContact, err := h.repo.Create(contact)
 		if err != nil {
 			h.log.Error("Erro ao criar contato", "error", err)
+			if utils.IsUniqueConstraintError(err) { // Capturar erro de chave única
+				utils.SendError(w, http.StatusConflict, "E-mail ou WhatsApp já cadastrado")
+				return
+			}
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao criar contato")
 			return
 		}
@@ -100,7 +119,6 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 	}
 }
 
-// 📌 Buscar todos os contatos da conta autenticada
 func (h *contactHandle) GetAllContactsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
@@ -109,8 +127,11 @@ func (h *contactHandle) GetAllContactsHandler() http.HandlerFunc {
 			return
 		}
 
+		// 📌 Capturar filtros opcionais da query string
+		filters := utils.ExtractQueryFilters(r.URL.Query(), []string{"name", "email", "whatsapp", "cidade", "estado", "bairro", "tags", "interesses", "perfil", "eventos"})
+
 		// 📌 Buscar contatos da conta autenticada
-		contacts, err := h.repo.GetByAccountID(authAccount.ID)
+		contacts, err := h.repo.GetByAccountID(authAccount.ID, filters)
 		if err != nil {
 			h.log.Error("Erro ao buscar contatos", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar contatos")
@@ -217,6 +238,18 @@ func (h *contactHandle) UpdateContactHandler() http.HandlerFunc {
 		if contactDTO.WhatsApp != nil {
 			contact.WhatsApp = utils.FormatWhatsApp(*contactDTO.WhatsApp)
 		}
+		if contactDTO.Gender != nil {
+			contact.Gender = contactDTO.Gender
+		}
+		if contactDTO.Bairro != nil {
+			contact.Bairro = contactDTO.Bairro
+		}
+		if contactDTO.Cidade != nil {
+			contact.Cidade = contactDTO.Cidade
+		}
+		if contactDTO.Estado != nil {
+			contact.Estado = contactDTO.Estado
+		}
 		if contactDTO.BirthDate != nil {
 			birthDate, err := time.Parse(time.DateOnly, *contactDTO.BirthDate)
 			if err != nil {
@@ -226,9 +259,11 @@ func (h *contactHandle) UpdateContactHandler() http.HandlerFunc {
 			}
 			contact.BirthDate = &birthDate
 		}
-		if contactDTO.OptOut != nil && *contactDTO.OptOut {
-			now := time.Now()
-			contact.OptOutAt = &now
+		if contactDTO.Tags != nil {
+			contact.Tags = *contactDTO.Tags
+		}
+		if contactDTO.History != nil {
+			contact.History = contactDTO.History
 		}
 
 		// 📌 Salvar atualização
