@@ -15,8 +15,8 @@ import (
 type ContactCreateDTO struct {
 	AccountID uuid.UUID          `json:"account_id"` // ID da conta proprietária do contato
 	Name      string             `json:"name"`
-	Email     string             `json:"email,omitempty"`
-	WhatsApp  string             `json:"whatsapp,omitempty"`
+	Email     *string            `json:"email,omitempty"`
+	WhatsApp  *string            `json:"whatsapp,omitempty"`
 	Gender    *string            `json:"gender,omitempty"`
 	BirthDate *string            `json:"birth_date,omitempty"`
 	Bairro    *string            `json:"bairro,omitempty"`
@@ -32,18 +32,18 @@ func (c *ContactCreateDTO) Validate() error {
 		return errors.New("o nome é obrigatório")
 	}
 
-	if c.Email == "" && c.WhatsApp == "" {
+	if c.Email == nil && c.WhatsApp == nil {
 		return errors.New("é necessário fornecer um e-mail ou WhatsApp")
 	}
 
-	if c.Email != "" {
-		if err := utils.ValidateEmail(c.Email); err != nil {
+	if c.Email != nil {
+		if err := utils.ValidateEmail(*c.Email); err != nil {
 			return errors.New("e-mail inválido: " + err.Error())
 		}
 	}
 
-	if c.WhatsApp != "" {
-		if err := utils.ValidateWhatsApp(c.WhatsApp); err != nil {
+	if c.WhatsApp != nil {
+		if err := utils.ValidateWhatsApp(*c.WhatsApp); err != nil {
 			return errors.New("número de WhatsApp inválido: " + err.Error())
 		}
 	}
@@ -61,6 +61,30 @@ func (c *ContactCreateDTO) Validate() error {
 	}
 
 	return nil
+}
+
+// Normalize aplica regras de formatação para padronizar os dados do contato antes da persistência
+func (c *ContactCreateDTO) Normalize() {
+	// 🔹 Normaliza Nome
+	c.Name = *utils.Capitalize(&c.Name)
+
+	// 🔹 Normaliza Email
+	c.Email = utils.SanitizeEmail(c.Email)
+
+	// 🔹 Normaliza WhatsApp
+	c.WhatsApp = utils.SanitizeWhatsApp(c.WhatsApp)
+
+	// 🔹 Normaliza Gênero
+	c.Gender = utils.NormalizeGender(c.Gender)
+
+	// 🔹 Normaliza Data de Nascimento, Bairro, Cidade e Estado
+	c.BirthDate = utils.NormalizeBirthDate(c.BirthDate)
+	c.Bairro = utils.Capitalize(c.Bairro)
+	c.Cidade = utils.Capitalize(c.Cidade)
+	c.Estado = utils.NilIfEmpty(c.Estado)
+
+	// 🔹 Normaliza Histórico
+	c.History = utils.NilIfEmpty(c.History)
 }
 
 // ContactUpdateDTO define os dados permitidos para atualização de um contato
@@ -84,8 +108,8 @@ type ContactResponseDTO struct {
 	ID            string             `json:"id"`
 	AccountID     string             `json:"account_id"`
 	Name          string             `json:"name"`
-	Email         string             `json:"email,omitempty"`
-	WhatsApp      string             `json:"whatsapp,omitempty"`
+	Email         *string            `json:"email,omitempty"`
+	WhatsApp      *string            `json:"whatsapp,omitempty"`
 	Gender        *string            `json:"gender,omitempty"`
 	BirthDate     *string            `json:"birth_date,omitempty"`
 	Bairro        *string            `json:"bairro,omitempty"`

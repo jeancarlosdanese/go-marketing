@@ -13,8 +13,8 @@ type Contact struct {
 	ID            uuid.UUID   `json:"id"`
 	AccountID     uuid.UUID   `json:"account_id"`
 	Name          string      `json:"name"`
-	Email         string      `json:"email,omitempty"`
-	WhatsApp      string      `json:"whatsapp,omitempty"`
+	Email         *string     `json:"email,omitempty"`
+	WhatsApp      *string     `json:"whatsapp,omitempty"`
 	Gender        *string     `json:"gender,omitempty"`
 	BirthDate     *time.Time  `json:"birth_date,omitempty"`
 	Bairro        *string     `json:"bairro,omitempty"`
@@ -30,7 +30,7 @@ type Contact struct {
 
 // ContactTags estrutura as tags como JSONB
 type ContactTags struct {
-	Interesses []string `json:"interesses,omitempty"`
-	Perfil     []string `json:"perfil,omitempty"`
-	Eventos    []string `json:"eventos,omitempty"`
+	Interesses []*string `json:"interesses,omitempty"`
+	Perfil     *string   `json:"perfil,omitempty"`
+	Eventos    []*string `json:"eventos,omitempty"`
 }

@@ -66,12 +66,15 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 			return
 		}
 
+		// Normalize DTO
+		contactDTO.Normalize()
+
 		// 📌 Criar o modelo de contato
 		contact := &models.Contact{
 			AccountID: contactDTO.AccountID,
 			Name:      contactDTO.Name,
 			Email:     contactDTO.Email,
-			WhatsApp:  utils.FormatWhatsApp(contactDTO.WhatsApp),
+			WhatsApp:  contactDTO.WhatsApp,
 			Gender:    contactDTO.Gender,
 			BirthDate: nil,
 			Bairro:    contactDTO.Bairro,
@@ -82,16 +85,6 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 		}
 
 		if contact.BirthDate != nil {
-			birthDate, err := time.Parse(time.DateOnly, *contactDTO.BirthDate)
-			if err != nil {
-				h.log.Warn("Data de nascimento inválida", "error", err)
-				utils.SendError(w, http.StatusBadRequest, "Data de nascimento inválida")
-				return
-			}
-			contact.BirthDate = &birthDate
-		}
-
-		if contactDTO.BirthDate != nil {
 			birthDate, err := time.Parse(time.DateOnly, *contactDTO.BirthDate)
 			if err != nil {
 				h.log.Warn("Data de nascimento inválida", "error", err)
@@ -233,10 +226,10 @@ func (h *contactHandle) UpdateContactHandler() http.HandlerFunc {
 			contact.Name = *contactDTO.Name
 		}
 		if contactDTO.Email != nil {
-			contact.Email = *contactDTO.Email
+			contact.Email = utils.NormalizeEmail(contact.Email)
 		}
 		if contactDTO.WhatsApp != nil {
-			contact.WhatsApp = utils.FormatWhatsApp(*contactDTO.WhatsApp)
+			contact.WhatsApp = utils.FormatWhatsAppOnlyNumbers(contact.WhatsApp)
 		}
 		if contactDTO.Gender != nil {
 			contact.Gender = contactDTO.Gender
@@ -259,6 +252,7 @@ func (h *contactHandle) UpdateContactHandler() http.HandlerFunc {
 			}
 			contact.BirthDate = &birthDate
 		}
+
 		if contactDTO.Tags != nil {
 			contact.Tags = *contactDTO.Tags
 		}
