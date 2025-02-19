@@ -23,10 +23,13 @@ import (
 
 var rateLimiter = NewOpenAIRateLimiter(10) // Exemplo: 10 RPS
 
+const workerCount = 5
+
 // OpenAIRequest representa o payload enviado para a OpenAI
 type OpenAIRequest struct {
-	Model    string    `json:"model"`
-	Messages []ChatMsg `json:"messages"`
+	Model       string    `json:"model"`
+	Messages    []ChatMsg `json:"messages"`
+	Temperatura float64   `json:"temperature"`
 }
 
 type ChatMsg struct {
@@ -50,29 +53,35 @@ type OpenAIResponse struct {
 
 // ProcessCSVAndSaveDB processa cada linha do CSV e salva no banco de dados
 func ProcessCSVAndSaveDB(inputCSV io.Reader, contactRepo db.ContactRepository, accountID uuid.UUID, config *dto.ConfigImportContactDTO) (int, int, error) {
-	// 🔍 Criar um buffer para garantir que podemos reler o CSV
 	var buf bytes.Buffer
 	tee := io.TeeReader(inputCSV, &buf)
 
-	// 🔍 Abrir o CSV original com configuração mais segura
 	reader := csv.NewReader(tee)
-	reader.Comma = utils.DetectDelimiter(buf.Bytes()) // Detecta delimitador dinamicamente
-	reader.LazyQuotes = true                          // Permite aspas inconsistentes
-	reader.TrimLeadingSpace = true                    // Remove espaços extras antes de campos
-	reader.FieldsPerRecord = -1                       // Permite número variável de colunas por linha
+	reader.Comma = utils.DetectDelimiter(buf.Bytes())
+	reader.LazyQuotes = true
+	reader.TrimLeadingSpace = true
+	reader.FieldsPerRecord = -1
 
-	// 🔍 Ler cabeçalhos
 	headers, err := reader.Read()
 	if err != nil {
 		return 0, 0, fmt.Errorf("erro ao ler cabeçalhos do CSV: %w", err)
 	}
 
-	// 🔄 Processar cada linha de forma concorrente
+	recordsChan := make(chan []string, workerCount)
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 5) // Limita 5 requisições simultâneas
 	successCount := 0
 	failedCount := 0
 	var mu sync.Mutex
+
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for record := range recordsChan {
+				processRecord(record, headers, config, contactRepo, accountID, &successCount, &failedCount, &mu)
+			}
+		}()
+	}
 
 	for {
 		record, err := reader.Read()
@@ -84,92 +93,86 @@ func ProcessCSVAndSaveDB(inputCSV io.Reader, contactRepo db.ContactRepository, a
 			failedCount++
 			continue
 		}
-
-		wg.Add(1)
-		sem <- struct{}{} // Bloqueia se houver 5 requisições ativas
-
-		go func(record []string) {
-			defer wg.Done()
-			defer func() { <-sem }() // Libera o slot quando a requisição termina
-
-			// 🔹 Gerar prompt para a IA usando a configuração
-			prompt := GeneratePromptForAI(record, headers, config)
-
-			// 🔹 Enviar para a OpenAI
-			contactDTO, err := AskAIToFormatRecord(prompt)
-			if err != nil {
-				fmt.Println("Erro ao formatar registro:", err)
-				mu.Lock()
-				failedCount++
-				mu.Unlock()
-				return
-			}
-
-			contactDTO.Normalize() // Normaliza campos do DTO
-
-			// 🔹 Criar modelo de contato e salvar no banco
-			contact := models.Contact{
-				AccountID: accountID,
-				Name:      contactDTO.Name,
-				Email:     contactDTO.Email,
-				WhatsApp:  contactDTO.WhatsApp,
-				Gender:    contactDTO.Gender,
-				Bairro:    contactDTO.Bairro,
-				Cidade:    contactDTO.Cidade,
-				Estado:    contactDTO.Estado,
-				Tags:      contactDTO.Tags,
-				History:   contactDTO.History,
-			}
-
-			// 🔹 Converter data de nascimento
-			if contactDTO.BirthDate != nil {
-				birthDate, err := time.Parse("2006-01-02", *contactDTO.BirthDate)
-				if err != nil {
-					fmt.Println("Erro ao converter data de nascimento:", err)
-					mu.Lock()
-					failedCount++
-					mu.Unlock()
-					return
-				}
-				contact.BirthDate = &birthDate
-			}
-
-			// 🔹 Salvar no banco
-			_, err = contactRepo.Create(&contact)
-			if err != nil {
-				fmt.Println("Erro ao salvar contato no DB:", err)
-				mu.Lock()
-				failedCount++
-				mu.Unlock()
-				return
-			}
-
-			mu.Lock()
-			successCount++
-			mu.Unlock()
-		}(record)
+		recordsChan <- record
 	}
 
+	close(recordsChan)
 	wg.Wait()
+
 	return successCount, failedCount, nil
 }
 
-// 🔹 Envia um prompt para a OpenAI e retorna um DTO formatado
-func AskAIToFormatRecord(prompt string) (*dto.ContactCreateDTO, error) {
-	rateLimiter.Wait() // Garante que não ultrapassamos o limite
+func processRecord(record []string, headers []string, config *dto.ConfigImportContactDTO, contactRepo db.ContactRepository, accountID uuid.UUID, successCount *int, failedCount *int, mu *sync.Mutex) {
+	logID := uuid.New().String()
+	prompt := GeneratePromptForAI(record, headers, config)
 
+	contactDTO, err := AskAIToFormatRecord(prompt, logID)
+	if err != nil {
+		log.Printf("[%s] Erro ao formatar registro: %v", logID, err)
+		mu.Lock()
+		(*failedCount)++
+		mu.Unlock()
+		return
+	}
+
+	contactDTO.Normalize()
+	contact := models.Contact{
+		AccountID: accountID,
+		Name:      contactDTO.Name,
+		Email:     contactDTO.Email,
+		WhatsApp:  contactDTO.WhatsApp,
+		Gender:    contactDTO.Gender,
+		Bairro:    contactDTO.Bairro,
+		Cidade:    contactDTO.Cidade,
+		Estado:    contactDTO.Estado,
+		Tags:      contactDTO.Tags,
+		History:   contactDTO.History,
+	}
+
+	if contactDTO.BirthDate != nil {
+		birthDate, err := time.Parse("2006-01-02", *contactDTO.BirthDate)
+		if err == nil {
+			contact.BirthDate = &birthDate
+		}
+	}
+
+	if contactDTO.LastContactAt != nil {
+		lastContactAt, err := time.Parse("2006-01-02", *contactDTO.LastContactAt)
+		if err == nil {
+			contact.LastContactAt = &lastContactAt
+		}
+	}
+
+	_, err = contactRepo.Create(&contact)
+	if err != nil {
+		log.Printf("[%s] Erro ao salvar contato no DB: %v", logID, err)
+		mu.Lock()
+		(*failedCount)++
+		mu.Unlock()
+		return
+	}
+
+	mu.Lock()
+	(*successCount)++
+	mu.Unlock()
+}
+
+func AskAIToFormatRecord(prompt string, logID string) (*dto.ContactCreateDTO, error) {
+	rateLimiter.Wait()
 	openaiAPIKey := os.Getenv("OPENAI_API_KEY")
 	if openaiAPIKey == "" {
 		return nil, fmt.Errorf("OPENAI_API_KEY não configurada")
 	}
 
-	// 🔹 Criar requisição para OpenAI
+	log.Printf("📤 [%s] Enviando para OpenAI: %s", logID, prompt)
+
 	requestData := OpenAIRequest{
 		Model: "gpt-4o-mini",
 		Messages: []ChatMsg{
-			{Role: "system", Content: "Você é um assistente que retorna apenas JSON puro, sem formatação extra."},
+			{Role: "system", Content: "Você é um assistente que retorna apenas JSON puro."},
 			{Role: "user", Content: prompt},
 		},
+		Temperatura: 0.7,
 	}
 
 	reqBody, err := json.Marshal(requestData)
@@ -192,28 +195,28 @@ func AskAIToFormatRecord(prompt string) (*dto.ContactCreateDTO, error) {
 	}
 	defer resp.Body.Close()
 
-	// 🔹 Decodificando a resposta usando um struct intermediário
 	var aiResponse OpenAIResponse
 	err = json.NewDecoder(resp.Body).Decode(&aiResponse)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao decodificar resposta da OpenAI: %w", err)
 	}
 
-	// 🔹 Verificar se há uma resposta válida
 	if len(aiResponse.Choices) == 0 {
-		return nil, fmt.Errorf("nenhuma escolha retornada pela OpenAI")
+		return nil, fmt.Errorf("nenhuma resposta válida da OpenAI")
 	}
 
-	// 🔹 Extrair o conteúdo da resposta
 	rawJSON := aiResponse.Choices[0].Message.Content
 
-	// 🔹 Decodificar JSON para ContactCreateDTO
+	if !utils.IsValidJSON(rawJSON) {
+		return nil, fmt.Errorf("JSON inválido da OpenAI")
+	}
+
 	var contactDTO dto.ContactCreateDTO
 	if err := json.Unmarshal([]byte(rawJSON), &contactDTO); err != nil {
 		return nil, fmt.Errorf("erro ao converter JSON para DTO: %w", err)
 	}
 
-	log.Printf("✅ Contato processado: %+v", contactDTO)
+	log.Printf("✅ [%s] Contato processado com sucesso", logID)
 
 	return &contactDTO, nil
 }

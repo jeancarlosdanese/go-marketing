@@ -38,8 +38,8 @@ func (r *contactRepo) Create(contact *models.Contact) (*models.Contact, error) {
 
 	query := `
 		INSERT INTO contacts (
-			account_id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, tags, history, opt_out_at, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+			account_id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, tags, history, opt_out_at, last_contact_at, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13 ,NOW(), NOW())
 		RETURNING id, created_at, updated_at
 	`
 
@@ -49,7 +49,7 @@ func (r *contactRepo) Create(contact *models.Contact) (*models.Contact, error) {
 		query,
 		contact.AccountID, contact.Name, contact.Email, contact.WhatsApp,
 		contact.Gender, contact.BirthDate, contact.Bairro, contact.Cidade, contact.Estado,
-		tagsJSON, contact.History, contact.OptOutAt,
+		tagsJSON, contact.History, contact.OptOutAt, contact.LastContactAt,
 	).Scan(&contact.ID, &contact.CreatedAt, &contact.UpdatedAt)
 
 	if err != nil {

@@ -13,17 +13,18 @@ import (
 
 // ContactCreateDTO define os dados para criação de um contato
 type ContactCreateDTO struct {
-	AccountID uuid.UUID          `json:"account_id"` // ID da conta proprietária do contato
-	Name      string             `json:"name"`
-	Email     *string            `json:"email,omitempty"`
-	WhatsApp  *string            `json:"whatsapp,omitempty"`
-	Gender    *string            `json:"gender,omitempty"`
-	BirthDate *string            `json:"birth_date,omitempty"`
-	Bairro    *string            `json:"bairro,omitempty"`
-	Cidade    *string            `json:"cidade,omitempty"`
-	Estado    *string            `json:"estado,omitempty"`
-	Tags      models.ContactTags `json:"tags,omitempty"`
-	History   *string            `json:"history,omitempty"`
+	AccountID     uuid.UUID          `json:"account_id"` // ID da conta proprietária do contato
+	Name          string             `json:"name"`
+	Email         *string            `json:"email,omitempty"`
+	WhatsApp      *string            `json:"whatsapp,omitempty"`
+	Gender        *string            `json:"gender,omitempty"`
+	BirthDate     *string            `json:"birth_date,omitempty"`
+	Bairro        *string            `json:"bairro,omitempty"`
+	Cidade        *string            `json:"cidade,omitempty"`
+	Estado        *string            `json:"estado,omitempty"`
+	Tags          models.ContactTags `json:"tags,omitempty"`
+	History       *string            `json:"history,omitempty"`
+	LastContactAt *string            `json:"last_contact_at,omitempty"`
 }
 
 // Validate valida os dados do ContactCreateDTO
@@ -60,31 +61,60 @@ func (c *ContactCreateDTO) Validate() error {
 		}
 	}
 
+	if c.LastContactAt != nil {
+		if err := utils.ValidateDate(*c.LastContactAt); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
-// Normalize aplica regras de formatação para padronizar os dados do contato antes da persistência
+// Normalize normaliza os dados do ContactCreateDTO
 func (c *ContactCreateDTO) Normalize() {
-	// 🔹 Normaliza Nome
-	c.Name = *utils.Capitalize(&c.Name)
+	// 🔹 Normaliza Nome (garante que não seja nil antes de capitalizar)
+	if c.Name != "" {
+		c.Name = *utils.Capitalize(&c.Name)
+	}
 
-	// 🔹 Normaliza Email
-	c.Email = utils.SanitizeEmail(c.Email)
+	// 🔹 Normaliza Email (verifica nil antes de normalizar)
+	if c.Email != nil {
+		c.Email = utils.SanitizeEmail(c.Email)
+	}
 
-	// 🔹 Normaliza WhatsApp
-	c.WhatsApp = utils.SanitizeWhatsApp(c.WhatsApp)
+	// 🔹 Normaliza WhatsApp (verifica nil antes de normalizar)
+	if c.WhatsApp != nil {
+		c.WhatsApp = utils.SanitizeWhatsApp(c.WhatsApp)
+	}
 
-	// 🔹 Normaliza Gênero
-	c.Gender = utils.NormalizeGender(c.Gender)
+	// 🔹 Normaliza Gênero (verifica nil antes de normalizar)
+	if c.Gender != nil {
+		c.Gender = utils.NormalizeGender(c.Gender)
+	}
 
 	// 🔹 Normaliza Data de Nascimento, Bairro, Cidade e Estado
-	c.BirthDate = utils.NormalizeBirthDate(c.BirthDate)
-	c.Bairro = utils.Capitalize(c.Bairro)
-	c.Cidade = utils.Capitalize(c.Cidade)
-	c.Estado = utils.NilIfEmpty(c.Estado)
+	if c.BirthDate != nil {
+		c.BirthDate = utils.NormalizeBirthDate(c.BirthDate)
+	}
+	if c.Bairro != nil {
+		c.Bairro = utils.Capitalize(c.Bairro)
+	}
+	if c.Cidade != nil {
+		c.Cidade = utils.Capitalize(c.Cidade)
+	}
+	if c.Estado != nil {
+		c.Estado = utils.NilIfEmpty(c.Estado)
+	}
 
-	// 🔹 Normaliza Histórico
-	c.History = utils.NilIfEmpty(c.History)
+	// 🔹 Normaliza Histórico (verifica nil antes de processar)
+	if c.History != nil {
+		c.History = utils.NilIfEmpty(c.History)
+	}
+
+	// 🔹 Normaliza Último Contato (verifica nil antes de processar
+	if c.LastContactAt != nil {
+		c.LastContactAt = utils.NormalizeBirthDate(c.LastContactAt)
+	}
 }
 
 // ContactUpdateDTO define os dados permitidos para atualização de um contato

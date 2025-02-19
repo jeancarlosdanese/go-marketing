@@ -5,6 +5,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/jeancarlosdanese/go-marketing/internal/dto"
@@ -15,9 +16,12 @@ func GeneratePromptForAI(record []string, headers []string, config *dto.ConfigIm
 	// 🔹 Criar um mapa associando cabeçalhos aos valores do CSV
 	dataMap := make(map[string]string)
 	for i, value := range record {
-		dataMap[headers[i]] = value
+		cleanHeader := sanitizeHeader(headers[i]) // Limpa cabeçalhos para evitar erros
+		dataMap[cleanHeader] = strings.TrimSpace(value)
 	}
-	dataJSON, _ := json.MarshalIndent(dataMap, "", "  ") // Garante um JSON formatado corretamente
+
+	// 🔹 Garante um JSON formatado corretamente
+	dataJSON, _ := json.MarshalIndent(dataMap, "", "  ")
 
 	// 🔹 Gerar instruções personalizadas para a IA com base na configuração
 	fieldInstructions := generateFieldInstructions(config)
@@ -33,9 +37,10 @@ func GeneratePromptForAI(record []string, headers []string, config *dto.ConfigIm
 	- bairro (string) -> Bairro onde reside.
 	- cidade (string) -> Cidade onde reside.
 	- estado (string) -> Sigla do estado (UF).
-	- tags (JSONB) -> Informações categorizadas, podendo incluir interesses, perfil e eventos.
+	- tags (JSONB) -> Informações categorizadas, devem incluir interesses, perfil e eventos. Conforme exemplo: {"eventos": ["evento1", "evento2"], "interesses": ["interesse1", "interesse2"], "perfil": "perfil1"}.
 	- history (text) -> Notas sobre interações anteriores.
 	- opt_out_at (timestamp) -> Caso o contato tenha solicitado exclusão.
+	- last_contact_at (timestamp) -> Data da última interação com o contato.
 	`
 
 	// 🔹 Construção do prompt com as instruções específicas
@@ -58,24 +63,33 @@ func GeneratePromptForAI(record []string, headers []string, config *dto.ConfigIm
 	return prompt
 }
 
+// sanitizeHeader padroniza os nomes dos cabeçalhos para evitar problemas na IA
+func sanitizeHeader(header string) string {
+	// Remove espaços extras e caracteres especiais
+	re := regexp.MustCompile(`[^a-zA-Z0-9_]+`)
+	cleanHeader := re.ReplaceAllString(strings.ToLower(strings.TrimSpace(header)), "_")
+	return cleanHeader
+}
+
 // generateFieldInstructions gera as instruções para a IA com base na configuração do usuário.
 func generateFieldInstructions(config *dto.ConfigImportContactDTO) string {
 	var instructions []string
 
 	// 🔹 Percorrer cada campo do DTO de configuração
 	fieldMappings := map[string]dto.FieldMapping{
-		"name":       config.Name,
-		"email":      config.Email,
-		"whatsapp":   config.WhatsApp,
-		"gender":     config.Gender,
-		"birth_date": config.BirthDate,
-		"bairro":     config.Bairro,
-		"cidade":     config.Cidade,
-		"estado":     config.Estado,
-		"eventos":    config.Eventos,
-		"interesses": config.Interesses,
-		"perfil":     config.Perfil,
-		"history":    config.History,
+		"name":            config.Name,
+		"email":           config.Email,
+		"whatsapp":        config.WhatsApp,
+		"gender":          config.Gender,
+		"birth_date":      config.BirthDate,
+		"bairro":          config.Bairro,
+		"cidade":          config.Cidade,
+		"estado":          config.Estado,
+		"eventos":         config.Eventos,
+		"interesses":      config.Interesses,
+		"perfil":          config.Perfil,
+		"history":         config.History,
+		"last_contact_at": config.LastContactAt,
 	}
 
 	for field, mapping := range fieldMappings {

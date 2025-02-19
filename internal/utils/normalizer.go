@@ -85,6 +85,7 @@ func NormalizeGender(gender *string) *string {
 	}
 }
 
+// NormalizeBirthDate normaliza e valida a data de nascimento
 func NormalizeBirthDate(date *string) *string {
 	if date == nil {
 		return nil
