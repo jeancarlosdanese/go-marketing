@@ -21,9 +21,13 @@ import (
 	"github.com/jeancarlosdanese/go-marketing/internal/utils"
 )
 
+// Controla o número máximo de requisições simultâneas para a OpenAI (10 requisições por segundo).
 var rateLimiter = NewOpenAIRateLimiter(10) // Exemplo: 10 RPS
 
+// Define que o processamento será feito em paralelo com 5 goroutines
 const workerCount = 5
+
+// Estruturas para Comunicação com a OpenAI
 
 // OpenAIRequest representa o payload enviado para a OpenAI
 type OpenAIRequest struct {
@@ -32,11 +36,13 @@ type OpenAIRequest struct {
 	Temperatura float64   `json:"temperature"`
 }
 
+// ChatMsg representa uma mensagem enviada para a OpenAI
 type ChatMsg struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
+// OpenAIResponse representa a resposta da OpenAI
 type OpenAIResponse struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
@@ -54,25 +60,27 @@ type OpenAIResponse struct {
 // ProcessCSVAndSaveDB processa cada linha do CSV e salva no banco de dados
 func ProcessCSVAndSaveDB(inputCSV io.Reader, contactRepo db.ContactRepository, accountID uuid.UUID, config *dto.ConfigImportContactDTO) (int, int, error) {
 	var buf bytes.Buffer
-	tee := io.TeeReader(inputCSV, &buf)
+	tee := io.TeeReader(inputCSV, &buf) // Salva o conteúdo do CSV em um buffer para detectar o delimitador
 
-	reader := csv.NewReader(tee)
-	reader.Comma = utils.DetectDelimiter(buf.Bytes())
-	reader.LazyQuotes = true
-	reader.TrimLeadingSpace = true
-	reader.FieldsPerRecord = -1
+	reader := csv.NewReader(tee)                      // Lê o CSV a partir do buffer
+	reader.Comma = utils.DetectDelimiter(buf.Bytes()) // Detecta o delimitador do CSV
+	reader.LazyQuotes = true                          // Permite erros menores de aspas. Ex: "campo com "aspas""
+	reader.TrimLeadingSpace = true                    // Remove espaços em branco no início dos campos
+	reader.FieldsPerRecord = -1                       // Permite número variável de campos por linha
 
+	// Lê os cabeçalhos do CSV
 	headers, err := reader.Read()
 	if err != nil {
 		return 0, 0, fmt.Errorf("erro ao ler cabeçalhos do CSV: %w", err)
 	}
 
-	recordsChan := make(chan []string, workerCount)
-	var wg sync.WaitGroup
-	successCount := 0
-	failedCount := 0
+	recordsChan := make(chan []string, workerCount) // Canal para enviar registros para as goroutines
+	var wg sync.WaitGroup                           // WaitGroup para esperar todas as goroutines terminarem
+	successCount := 0                               // Contador de registros processados com sucesso
+	failedCount := 0                                // Contador de registros com falha
 	var mu sync.Mutex
 
+	// Inicia as goroutines para processar os registros
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
 		go func() {
@@ -83,6 +91,7 @@ func ProcessCSVAndSaveDB(inputCSV io.Reader, contactRepo db.ContactRepository, a
 		}()
 	}
 
+	// Lê cada linha do CSV e envia para o canal recordsChan, que será consumido pelos workers.
 	for {
 		record, err := reader.Read()
 		if err == io.EOF {
@@ -96,16 +105,20 @@ func ProcessCSVAndSaveDB(inputCSV io.Reader, contactRepo db.ContactRepository, a
 		recordsChan <- record
 	}
 
-	close(recordsChan)
-	wg.Wait()
+	close(recordsChan) // Fecha o canal para indicar que não há mais registros
+	wg.Wait()          // Aguarda todos os workers terminarem antes de retornar
 
 	return successCount, failedCount, nil
 }
 
+// processRecord processa um registro do CSV e salva no banco de dados
 func processRecord(record []string, headers []string, config *dto.ConfigImportContactDTO, contactRepo db.ContactRepository, accountID uuid.UUID, successCount *int, failedCount *int, mu *sync.Mutex) {
 	logID := uuid.New().String()
+
+	// Gera o prompt para a AI
 	prompt := GeneratePromptForAI(record, headers, config)
 
+	// Formata o registro com a AI
 	contactDTO, err := AskAIToFormatRecord(prompt, logID)
 	if err != nil {
 		log.Printf("[%s] Erro ao formatar registro: %v", logID, err)
@@ -116,6 +129,14 @@ func processRecord(record []string, headers []string, config *dto.ConfigImportCo
 	}
 
 	contactDTO.Normalize()
+
+	// 🔹 Agora que temos dados mais limpos, verificamos se o contato já existe no banco
+	existingContact, _ := contactRepo.FindByEmailOrWhatsApp(accountID, contactDTO.Email, contactDTO.WhatsApp)
+	if existingContact != nil {
+		log.Printf("[%s] ✅ Contato já existe no banco. Ignorando registro.", logID)
+		return
+	}
+
 	contact := models.Contact{
 		AccountID: accountID,
 		Name:      contactDTO.Name,

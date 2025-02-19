@@ -164,6 +164,40 @@ func (r *contactRepo) GetByAccountID(accountID uuid.UUID, filters map[string]str
 	return contacts, nil
 }
 
+// FindByEmailOrWhatsApp busca um contato pelo e-mail ou WhatsApp dentro de uma conta específica.
+func (r *contactRepo) FindByEmailOrWhatsApp(accountID uuid.UUID, email, whatsapp *string) (*models.Contact, error) {
+	query := `
+		SELECT id, account_id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, tags, history, opt_out_at, last_contact_at, created_at, updated_at
+		FROM contacts
+		WHERE account_id = $1 AND (email = $2 OR whatsapp = $3)
+		LIMIT 1
+	`
+
+	contact := &models.Contact{}
+	var tagsJSON []byte
+
+	err := r.db.QueryRow(query, accountID, email, whatsapp).Scan(
+		&contact.ID, &contact.AccountID, &contact.Name, &contact.Email, &contact.WhatsApp,
+		&contact.Gender, &contact.BirthDate, &contact.Bairro, &contact.Cidade, &contact.Estado,
+		&tagsJSON, &contact.History, &contact.OptOutAt, &contact.LastContactAt,
+		&contact.CreatedAt, &contact.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil // Nenhum contato encontrado
+		}
+		return nil, fmt.Errorf("erro ao buscar contato por email/WhatsApp: %w", err)
+	}
+
+	// Decodificar JSONB
+	if err := json.Unmarshal(tagsJSON, &contact.Tags); err != nil {
+		return nil, fmt.Errorf("erro ao decodificar tags JSON: %w", err)
+	}
+
+	return contact, nil
+}
+
 // UpdateByID atualiza um contato pelo ID.
 func (r *contactRepo) UpdateByID(contactID uuid.UUID, contact *models.Contact) (*models.Contact, error) {
 	r.log.Debug("Atualizando contato por ID", "id", contactID)
