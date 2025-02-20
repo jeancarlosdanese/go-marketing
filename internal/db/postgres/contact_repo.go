@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
+	"github.com/jeancarlosdanese/go-marketing/internal/utils"
 )
 
 // contactRepo implementa ContactRepository para PostgreSQL.
@@ -26,11 +27,14 @@ func NewContactRepository(db *sql.DB) *contactRepo {
 	return &contactRepo{log: log, db: db}
 }
 
-// Create insere um novo contato no banco de dados.
+// 📌 Criar contato no banco
 func (r *contactRepo) Create(contact *models.Contact) (*models.Contact, error) {
-	r.log.Debug("Criando novo contato", "name", contact.Name, "email", contact.Email)
+	r.log.Debug("Criando novo contato",
+		slog.String("account_id", contact.AccountID.String()),
+		slog.String("name", contact.Name),
+		slog.String("email", utils.SafeString(contact.Email)),
+		slog.String("whatsapp", utils.SafeString(contact.WhatsApp)))
 
-	// Convertendo tags para JSONB
 	tagsJSON, err := json.Marshal(contact.Tags)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao converter tags para JSON: %w", err)
@@ -39,11 +43,9 @@ func (r *contactRepo) Create(contact *models.Contact) (*models.Contact, error) {
 	query := `
 		INSERT INTO contacts (
 			account_id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, tags, history, opt_out_at, last_contact_at, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13 ,NOW(), NOW())
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
 		RETURNING id, created_at, updated_at
 	`
-
-	r.log.Debug("Executando query", "query", query)
 
 	err = r.db.QueryRow(
 		query,
@@ -53,22 +55,29 @@ func (r *contactRepo) Create(contact *models.Contact) (*models.Contact, error) {
 	).Scan(&contact.ID, &contact.CreatedAt, &contact.UpdatedAt)
 
 	if err != nil {
+		r.log.Error("Erro ao criar contato",
+			slog.String("account_id", contact.AccountID.String()),
+			slog.String("error", err.Error()))
 		return nil, fmt.Errorf("erro ao criar contato: %w", err)
 	}
 
-	r.log.Debug("Contato criado com sucesso", "id", contact.ID)
+	r.log.Info("Contato criado com sucesso",
+		slog.String("contact_id", contact.ID.String()),
+		slog.String("account_id", contact.AccountID.String()))
 
 	return contact, nil
 }
 
-// GetByID retorna um contato pelo ID.
+// 📌 Buscar contato pelo ID
 func (r *contactRepo) GetByID(contactID uuid.UUID) (*models.Contact, error) {
-	r.log.Debug("Buscando contato por ID", "id", contactID)
+	r.log.Debug("Buscando contato por ID",
+		slog.String("contact_id", contactID.String()))
 
 	query := `
 		SELECT id, account_id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, tags, history, opt_out_at, last_contact_at, created_at, updated_at
 		FROM contacts WHERE id = $1
 	`
+
 	contact := &models.Contact{}
 	var tagsJSON []byte
 
@@ -78,25 +87,32 @@ func (r *contactRepo) GetByID(contactID uuid.UUID) (*models.Contact, error) {
 		&tagsJSON, &contact.History, &contact.OptOutAt, &contact.LastContactAt,
 		&contact.CreatedAt, &contact.UpdatedAt,
 	)
+
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil // Retorna nil se não encontrar
+			return nil, nil
 		}
+		r.log.Error("Erro ao buscar contato",
+			slog.String("contact_id", contactID.String()),
+			slog.String("error", err.Error()))
 		return nil, fmt.Errorf("erro ao buscar contato: %w", err)
 	}
 
-	// Decodificando JSONB
-	if err := json.Unmarshal(tagsJSON, &contact.Tags); err != nil {
-		r.log.Warn("Erro ao decodificar tags JSON", "id", contact.ID, "error", err)
+	if len(tagsJSON) > 0 {
+		_ = json.Unmarshal(tagsJSON, &contact.Tags)
 	}
 
-	r.log.Debug("Contato encontrado", "id", contact.ID)
+	r.log.Debug("Contato encontrado",
+		slog.String("contact_id", contact.ID.String()),
+		slog.String("account_id", contact.AccountID.String()))
 
 	return contact, nil
 }
 
+// 📌 Buscar contatos por account_id
 func (r *contactRepo) GetByAccountID(accountID uuid.UUID, filters map[string]string) ([]models.Contact, error) {
-	r.log.Debug("Buscando contatos por account_id", "account_id", accountID, "filters", filters)
+	r.log.Debug("Buscando contatos por account_id",
+		slog.String("account_id", accountID.String()))
 
 	baseQuery := `
 		SELECT id, account_id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, tags, history, opt_out_at, last_contact_at, created_at, updated_at
@@ -160,47 +176,48 @@ func (r *contactRepo) GetByAccountID(accountID uuid.UUID, filters map[string]str
 		contacts = append(contacts, contact)
 	}
 
-	r.log.Debug("Contatos encontrados", "total", len(contacts))
+	r.log.Debug("Contatos encontrados",
+		slog.String("account_id", accountID.String()),
+		slog.Int("total", len(contacts)))
 	return contacts, nil
 }
 
-// FindByEmailOrWhatsApp busca um contato pelo e-mail ou WhatsApp dentro de uma conta específica.
+// 📌 Buscar contato por e-mail ou WhatsApp dentro de uma conta específica
 func (r *contactRepo) FindByEmailOrWhatsApp(accountID uuid.UUID, email, whatsapp *string) (*models.Contact, error) {
 	query := `
-		SELECT id, account_id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, tags, history, opt_out_at, last_contact_at, created_at, updated_at
-		FROM contacts
+		SELECT id, account_id, name, email, whatsapp FROM contacts
 		WHERE account_id = $1 AND (email = $2 OR whatsapp = $3)
 		LIMIT 1
 	`
 
 	contact := &models.Contact{}
-	var tagsJSON []byte
 
 	err := r.db.QueryRow(query, accountID, email, whatsapp).Scan(
 		&contact.ID, &contact.AccountID, &contact.Name, &contact.Email, &contact.WhatsApp,
-		&contact.Gender, &contact.BirthDate, &contact.Bairro, &contact.Cidade, &contact.Estado,
-		&tagsJSON, &contact.History, &contact.OptOutAt, &contact.LastContactAt,
-		&contact.CreatedAt, &contact.UpdatedAt,
 	)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil // Nenhum contato encontrado
 		}
-		return nil, fmt.Errorf("erro ao buscar contato por email/WhatsApp: %w", err)
+		r.log.Error("Erro ao buscar contato por email/WhatsApp",
+			slog.String("account_id", accountID.String()),
+			slog.String("error", err.Error()))
+		return nil, fmt.Errorf("erro ao buscar contato: %w", err)
 	}
 
-	// Decodificar JSONB
-	if err := json.Unmarshal(tagsJSON, &contact.Tags); err != nil {
-		return nil, fmt.Errorf("erro ao decodificar tags JSON: %w", err)
-	}
+	r.log.Debug("Contato encontrado por email/WhatsApp",
+		slog.String("contact_id", contact.ID.String()),
+		slog.String("account_id", accountID.String()))
 
 	return contact, nil
 }
 
-// UpdateByID atualiza um contato pelo ID.
+// 📌 Atualizar contato pelo ID
 func (r *contactRepo) UpdateByID(contactID uuid.UUID, contact *models.Contact) (*models.Contact, error) {
-	r.log.Debug("Atualizando contato por ID", "id", contactID)
+	r.log.Debug("Atualizando contato",
+		slog.String("contact_id", contactID.String()),
+		slog.String("account_id", contact.AccountID.String()))
 
 	tagsJSON, _ := json.Marshal(contact.Tags)
 
@@ -217,25 +234,36 @@ func (r *contactRepo) UpdateByID(contactID uuid.UUID, contact *models.Contact) (
 	).Scan(&contact.UpdatedAt)
 
 	if err != nil {
+		r.log.Error("Erro ao atualizar contato",
+			slog.String("contact_id", contactID.String()),
+			slog.String("account_id", contact.AccountID.String()),
+			slog.String("error", err.Error()))
 		return nil, fmt.Errorf("erro ao atualizar contato: %w", err)
 	}
 
-	r.log.Debug("Contato atualizado com sucesso", "id", contactID)
+	r.log.Info("Contato atualizado com sucesso",
+		slog.String("contact_id", contactID.String()),
+		slog.String("account_id", contact.AccountID.String()))
 
 	return contact, nil
 }
 
-// DeleteByID remove um contato pelo ID.
+// 📌 Deletar contato pelo ID
 func (r *contactRepo) DeleteByID(contactID uuid.UUID) error {
-	r.log.Debug("Deletando contato por ID", "id", contactID)
+	r.log.Debug("Deletando contato",
+		slog.String("contact_id", contactID.String()))
 
 	query := `DELETE FROM contacts WHERE id = $1`
 	_, err := r.db.Exec(query, contactID)
 	if err != nil {
+		r.log.Error("Erro ao deletar contato",
+			slog.String("contact_id", contactID.String()),
+			slog.String("error", err.Error()))
 		return fmt.Errorf("erro ao deletar contato: %w", err)
 	}
 
-	r.log.Debug("Contato deletado com sucesso", "id", contactID)
+	r.log.Info("Contato deletado com sucesso",
+		slog.String("contact_id", contactID.String()))
 
 	return nil
 }

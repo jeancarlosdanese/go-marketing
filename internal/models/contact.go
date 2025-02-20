@@ -31,6 +31,6 @@ type Contact struct {
 // ContactTags estrutura as tags como JSONB
 type ContactTags struct {
 	Interesses []*string `json:"interesses,omitempty"`
-	Perfil     *string   `json:"perfil,omitempty"`
+	Perfil     []*string `json:"perfil,omitempty"`
 	Eventos    []*string `json:"eventos,omitempty"`
 }

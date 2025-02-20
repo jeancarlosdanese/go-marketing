@@ -37,7 +37,7 @@ func GeneratePromptForAI(record []string, headers []string, config *dto.ConfigIm
 	- bairro (string) -> Bairro onde reside.
 	- cidade (string) -> Cidade onde reside.
 	- estado (string) -> Sigla do estado (UF).
-	- tags (JSONB) -> Informações categorizadas, devem incluir interesses, perfil e eventos. Conforme exemplo: {"eventos": ["evento1", "evento2"], "interesses": ["interesse1", "interesse2"], "perfil": "perfil1"}.
+	- tags (JSONB) -> Informações categorizadas, devem incluir interesses, perfil e eventos. Conforme exemplo: {"eventos": ["evento1", "evento2"], "interesses": ["interesse1", "interesse2"], "perfil": ["perfil1"]}.
 	- history (text) -> Notas sobre interações anteriores.
 	- opt_out_at (timestamp) -> Caso o contato tenha solicitado exclusão.
 	- last_contact_at (timestamp) -> Data da última interação com o contato.

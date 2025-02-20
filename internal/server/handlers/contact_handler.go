@@ -44,7 +44,7 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 
 		// 📝 Decodificar JSON
 		if err := json.NewDecoder(r.Body).Decode(&contactDTO); err != nil {
-			h.log.Warn("Erro ao decodificar JSON", "error", err)
+			h.log.Warn("Erro ao decodificar JSON", slog.String("error", err.Error()))
 			utils.SendError(w, http.StatusBadRequest, "Erro ao processar requisição")
 			return
 		}
@@ -61,7 +61,7 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 
 		// 🔍 Validar DTO
 		if err := contactDTO.Validate(); err != nil {
-			h.log.Warn("Erro de validação", "error", err.Error())
+			h.log.Warn("Erro de validação", slog.String("error", err.Error()))
 			utils.SendError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -84,10 +84,10 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 			History:   contactDTO.History,
 		}
 
-		if contact.BirthDate != nil {
+		if contactDTO.BirthDate != nil {
 			birthDate, err := time.Parse(time.DateOnly, *contactDTO.BirthDate)
 			if err != nil {
-				h.log.Warn("Data de nascimento inválida", "error", err)
+				h.log.Warn("Data de nascimento inválida", slog.String("error", err.Error()))
 				utils.SendError(w, http.StatusBadRequest, "Data de nascimento inválida")
 				return
 			}
@@ -97,33 +97,42 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 		// 📌 Criar contato no banco de dados
 		createdContact, err := h.repo.Create(contact)
 		if err != nil {
-			h.log.Error("Erro ao criar contato", "error", err)
 			if utils.IsUniqueConstraintError(err) { // Capturar erro de chave única
+				h.log.Warn("Tentativa de criar contato já existente",
+					slog.String("email", utils.SafeString(contactDTO.Email)),
+					slog.String("whatsapp", utils.SafeString(contactDTO.WhatsApp)),
+				)
 				utils.SendError(w, http.StatusConflict, "E-mail ou WhatsApp já cadastrado")
 				return
 			}
+			h.log.Error("Erro ao inserir contato no banco",
+				slog.String("error", err.Error()),
+				slog.String("email", utils.SafeString(contactDTO.Email)),
+				slog.String("whatsapp", utils.SafeString(contactDTO.WhatsApp)),
+			)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao criar contato")
 			return
 		}
 
-		h.log.Info("Contato criado com sucesso", "id", createdContact.ID)
+		h.log.Info("Contato criado",
+			slog.String("contact_id", createdContact.ID.String()),
+			slog.String("email", utils.SafeString(createdContact.Email)),
+			slog.String("whatsapp", utils.SafeString(createdContact.WhatsApp)),
+		)
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(dto.NewContactResponseDTO(createdContact))
 	}
 }
 
+// 📌 Buscar Todos os Contatos
 func (h *contactHandle) GetAllContactsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 🔍 Buscar conta autenticada
 		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 		if !ok {
 			return
 		}
 
-		// 📌 Capturar filtros opcionais da query string
 		filters := utils.ExtractQueryFilters(r.URL.Query(), []string{"name", "email", "whatsapp", "cidade", "estado", "bairro", "tags", "interesses", "perfil", "eventos"})
-
-		// 📌 Buscar contatos da conta autenticada
 		contacts, err := h.repo.GetByAccountID(authAccount.ID, filters)
 		if err != nil {
 			h.log.Error("Erro ao buscar contatos", "error", err)
@@ -131,7 +140,6 @@ func (h *contactHandle) GetAllContactsHandler() http.HandlerFunc {
 			return
 		}
 
-		// 📌 Criar resposta DTO
 		var response []dto.ContactResponseDTO
 		for _, contact := range contacts {
 			response = append(response, dto.NewContactResponseDTO(&contact))
@@ -142,16 +150,14 @@ func (h *contactHandle) GetAllContactsHandler() http.HandlerFunc {
 	}
 }
 
-// 📌 Buscar um contato específico
+// 📌 Buscar Contato Específico
 func (h *contactHandle) GetContactHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 🔍 Buscar conta autenticada
 		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 		if !ok {
 			return
 		}
 
-		// 📌 Capturar `contact_id` da URL
 		contactID, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			h.log.Warn("ID inválido informado", "contact_id", r.PathValue("id"))
@@ -159,7 +165,6 @@ func (h *contactHandle) GetContactHandler() http.HandlerFunc {
 			return
 		}
 
-		// 📌 Buscar contato
 		contact, err := h.repo.GetByID(contactID)
 		if err != nil || contact == nil {
 			h.log.Warn("Contato não encontrado", "contact_id", contactID)
@@ -167,7 +172,6 @@ func (h *contactHandle) GetContactHandler() http.HandlerFunc {
 			return
 		}
 
-		// 📌 Verificar se o contato pertence ao usuário autenticado
 		if contact.AccountID != authAccount.ID {
 			h.log.Warn("Usuário tentou acessar contato de outra conta", "user_id", authAccount.ID, "contact_id", contactID)
 			utils.SendError(w, http.StatusForbidden, "Acesso negado")
@@ -179,7 +183,7 @@ func (h *contactHandle) GetContactHandler() http.HandlerFunc {
 	}
 }
 
-// 📌 Atualizar contato
+// / 📌 Atualizar contato
 func (h *contactHandle) UpdateContactHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var contactDTO dto.ContactUpdateDTO
@@ -274,16 +278,14 @@ func (h *contactHandle) UpdateContactHandler() http.HandlerFunc {
 	}
 }
 
-// 📌 Deletar contato
+// 📌 Deletar Contato
 func (h *contactHandle) DeleteContactHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 🔍 Buscar conta autenticada
 		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 		if !ok {
 			return
 		}
 
-		// 📌 Capturar `contact_id` da URL
 		contactID, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
 			h.log.Warn("ID inválido informado", "contact_id", r.PathValue("id"))
@@ -291,7 +293,6 @@ func (h *contactHandle) DeleteContactHandler() http.HandlerFunc {
 			return
 		}
 
-		// 📌 Buscar contato no banco
 		contact, err := h.repo.GetByID(contactID)
 		if err != nil || contact == nil {
 			h.log.Warn("Contato não encontrado", "contact_id", contactID)
@@ -299,14 +300,12 @@ func (h *contactHandle) DeleteContactHandler() http.HandlerFunc {
 			return
 		}
 
-		// 📌 Verificar se pertence ao usuário autenticado
 		if contact.AccountID != authAccount.ID {
 			h.log.Warn("Usuário tentou deletar contato de outra conta", "user_id", authAccount.ID, "contact_id", contactID)
 			utils.SendError(w, http.StatusForbidden, "Acesso negado")
 			return
 		}
 
-		// 📌 Deletar contato
 		if err := h.repo.DeleteByID(contactID); err != nil {
 			h.log.Error("Erro ao deletar contato", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao deletar contato")

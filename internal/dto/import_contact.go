@@ -27,11 +27,12 @@ type FieldMapping struct {
 }
 
 // Exemplo de configuração JSON
-const ExemploConfigJSON = `{
+const ExemploConfigJSON = `
+{
 	"about_data": {
 		"source": "todos_os_campos",
 		"rules": {
-			"info": "Dados de alunos que concluiram cursos de capacitação profissional livre em nossa escola, os cursos são de curta duração, entre 40 e 140 horas/aula. Os dados são coletados no momento da matrícula e durante o curso, são informações básicas e que podem ser usadas para ofertas de novos cursos e para aprimoramento de nossos serviços."
+			"info": "Dados de alunos que concluíram cursos de capacitação profissional livre em nossa escola..."
 		}
 	},
 	"name": {
@@ -55,7 +56,7 @@ const ExemploConfigJSON = `{
 	"gender": {
 		"source": "nome",
 		"rules": {
-			"check_name": "Procure definir o gênero pelo nome, se não for possível defina 'gender' como vazio ('')."
+			"check_name": "Definir gênero pelo nome, se não for possível deixar vazio."
 		}
 	},
 	"birth_date": {
@@ -79,31 +80,37 @@ const ExemploConfigJSON = `{
 	"eventos": {
 		"source": "cursos",
 		"rules": {
-			"categorize": "Associar cursos concluidos aos eventos relevantes"
+			"categorize": "Associar cursos concluídos aos eventos relevantes"
 		}
 	},
 	"interesses": {
 		"source": "cursos",
 		"rules": {
-			"map": "Relacionar cursos a interesses áreas específicas: ['marketing_vendas', 'tecnologia_da_informacao', 'design_multimidia', 'tecnicas_profissionais_manutencao', 'saude_bem_estar', 'idiomas', 'negocios_administracao_financas', 'desenvolvimento_pessoal_profissional', 'artesanato_moda', 'beleza_estetica', 'gastronomia_culinaria']"
+			"map": "Relacionar cursos a interesses em áreas específicas (possible_tags)",
+			"possible_tags": "marketing_vendas, tecnologia_da_informacao, design_multimidia, tecnicas_profissionais_manutencao, saude_bem_estar, idiomas, negocios_gestao_financas, desenvolvimento_pessoal_profissional, artesanato_moda, beleza_estetica, gastronomia_culinaria"
 		}
 	},
 	"perfil": {
-		"source": "todos_os_campos",
+		"source": "profissao,local_trabalho",
 		"rules": {
-			"generate": "Descrever de forma sucinta perfil do aluno com base nos dados disponíveis, algo que possa ser relevante para ser usando em oferta de novos curso, máximo 250 caracteres"
+			"categorize": "Categorize o perfil (possible_tags) com base nas informações de profissão e local de trabalho",
+			"possible_tags": "industria, producao, construcao_civil, manutencao, logistica, comercial, tecnologia, saude_bem_estar, educacao, financas, gestao, marketing, seguranca, engenharia, juridico, agronegocio, meio_ambiente"
 		}
 	},
 	"history": {
 		"source": "todos_os_campos",
 		"rules": {
-			"generate": "Criar um breve histórico do aluno por nossa escola, com informações relevantes e que possam ser uteis para oferta de novaos cursos, máximo de 500 caracteres"
+			"generate": "Criar um breve histórico do aluno com base nas informações disponíveis. Deve retornar um texto de até 500 caracteres, garantindo que: 
+1. O nome do aluno esteja sempre corretamente capitalizado, no formato 'João da Silva' (não todo maiúsculo, nem todo minúsculo). 
+2. Datas devem ser formatadas como 'DD/MM/YYYY'. 
+3. O texto deve ser relatar apenas fatos de forma natural e profissional, evitando repetições desnecessárias."
 		}
 	},
 	"last_contact_at": {
 		"source": "cursos",
 		"rules": {
-			"default_source": "Utilizar última data de conclusão de cursos. format 'YYYY-MM-DD'"
+			"default_source": "Utilizar última data de conclusão de cursos. Format 'YYYY-MM-DD'"
 		}
 	}
-}`
+}
+	`

@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"sync"
@@ -17,26 +17,24 @@ import (
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/dto"
+	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
 	"github.com/jeancarlosdanese/go-marketing/internal/utils"
 )
 
-// Controla o número máximo de requisições simultâneas para a OpenAI (10 requisições por segundo).
-var rateLimiter = NewOpenAIRateLimiter(10) // Exemplo: 10 RPS
+// 🔹 Limite de requisições para a OpenAI (10 requisições por segundo)
+var rateLimiter = NewOpenAIRateLimiter(10)
 
-// Define que o processamento será feito em paralelo com 5 goroutines
+// 🔹 Número de workers para processamento paralelo
 const workerCount = 5
 
-// Estruturas para Comunicação com a OpenAI
-
-// OpenAIRequest representa o payload enviado para a OpenAI
+// 🔹 Estruturas para Comunicação com a OpenAI
 type OpenAIRequest struct {
 	Model       string    `json:"model"`
 	Messages    []ChatMsg `json:"messages"`
-	Temperatura float64   `json:"temperature"`
+	Temperature float64   `json:"temperature"`
 }
 
-// ChatMsg representa uma mensagem enviada para a OpenAI
 type ChatMsg struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
@@ -57,86 +55,121 @@ type OpenAIResponse struct {
 	} `json:"choices"`
 }
 
-// ProcessCSVAndSaveDB processa cada linha do CSV e salva no banco de dados
+// 📌 Processar CSV e salvar no banco de dados
 func ProcessCSVAndSaveDB(inputCSV io.Reader, contactRepo db.ContactRepository, accountID uuid.UUID, config *dto.ConfigImportContactDTO) (int, int, error) {
+	log := logger.GetLogger()
+
 	var buf bytes.Buffer
-	tee := io.TeeReader(inputCSV, &buf) // Salva o conteúdo do CSV em um buffer para detectar o delimitador
+	tee := io.TeeReader(inputCSV, &buf)
+	reader := csv.NewReader(tee)
 
-	reader := csv.NewReader(tee)                      // Lê o CSV a partir do buffer
-	reader.Comma = utils.DetectDelimiter(buf.Bytes()) // Detecta o delimitador do CSV
-	reader.LazyQuotes = true                          // Permite erros menores de aspas. Ex: "campo com "aspas""
-	reader.TrimLeadingSpace = true                    // Remove espaços em branco no início dos campos
-	reader.FieldsPerRecord = -1                       // Permite número variável de campos por linha
+	// Detectar delimitador e configurar CSV
+	reader.Comma = utils.DetectDelimiter(buf.Bytes())
+	reader.LazyQuotes = true
+	reader.TrimLeadingSpace = true
+	reader.FieldsPerRecord = -1
 
-	// Lê os cabeçalhos do CSV
+	// Ler cabeçalhos do CSV
 	headers, err := reader.Read()
 	if err != nil {
 		return 0, 0, fmt.Errorf("erro ao ler cabeçalhos do CSV: %w", err)
 	}
 
-	recordsChan := make(chan []string, workerCount) // Canal para enviar registros para as goroutines
-	var wg sync.WaitGroup                           // WaitGroup para esperar todas as goroutines terminarem
-	successCount := 0                               // Contador de registros processados com sucesso
-	failedCount := 0                                // Contador de registros com falha
-	var mu sync.Mutex
+	recordsChan := make(chan []string, workerCount)
+	var wg sync.WaitGroup        // Aguardar todos os workers terminarem
+	var recordsWG sync.WaitGroup // 🔹 Novo WaitGroup para rastrear os registros processados
+	successCount := 0            // Contador de registros processados com sucesso
+	failedCount := 0             // Contador de registros com falha
+	var mu sync.Mutex            // Mutex para proteger contadores
 
-	// Inicia as goroutines para processar os registros
+	// 🔹 Inicia os workers para processar os registros
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
-		go func() {
+		go func(workerID int) {
 			defer wg.Done()
+			log.Debug("Worker iniciado", slog.Int("worker_id", workerID))
+
 			for record := range recordsChan {
-				processRecord(record, headers, config, contactRepo, accountID, &successCount, &failedCount, &mu)
+				log.Debug("Worker processando registro", slog.Int("worker_id", workerID))
+				processRecord(record, headers, config, contactRepo, accountID, &successCount, &failedCount, &mu, &recordsWG, log)
+				log.Debug("Worker finalizou processamento do registro", slog.Int("worker_id", workerID))
 			}
-		}()
+
+			log.Debug("Worker finalizado", slog.Int("worker_id", workerID))
+		}(i)
 	}
 
-	// Lê cada linha do CSV e envia para o canal recordsChan, que será consumido pelos workers.
+	// 🔹 Enviar registros para processamento
 	for {
 		record, err := reader.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			fmt.Println("Erro ao ler linha do CSV:", err)
+			log.Warn("Erro ao ler linha do CSV", "error", err)
+			mu.Lock()
 			failedCount++
+			mu.Unlock()
 			continue
 		}
+
+		recordsWG.Add(1) // 🔹 Adiciona um item ao contador de registros pendentes
 		recordsChan <- record
 	}
 
-	close(recordsChan) // Fecha o canal para indicar que não há mais registros
-	wg.Wait()          // Aguarda todos os workers terminarem antes de retornar
+	recordsWG.Wait()   // 🔹 Aguarda todos os registros serem processados antes de fechar
+	close(recordsChan) // 🔹 Agora pode fechar o canal, pois todos os registros já foram enviados
+
+	wg.Wait() // 🔹 Espera os workers terminarem
+
+	log.Info("Processamento do CSV concluído",
+		slog.Int("success_count", successCount),
+		slog.Int("failed_count", failedCount),
+	)
 
 	return successCount, failedCount, nil
 }
 
-// processRecord processa um registro do CSV e salva no banco de dados
-func processRecord(record []string, headers []string, config *dto.ConfigImportContactDTO, contactRepo db.ContactRepository, accountID uuid.UUID, successCount *int, failedCount *int, mu *sync.Mutex) {
+// 📌 Processar um registro individual do CSV
+func processRecord(record []string, headers []string, config *dto.ConfigImportContactDTO, contactRepo db.ContactRepository, accountID uuid.UUID, successCount *int, failedCount *int, mu *sync.Mutex, recordsWG *sync.WaitGroup, log *slog.Logger) {
 	logID := uuid.New().String()
+	log.Debug("Iniciando processamento do registro", slog.String("log_id", logID))
 
-	// Gera o prompt para a AI
+	// 🔹 Garantir que `recordsWG.Done()` sempre será chamado
+	defer func() {
+		log.Debug("Finalizando processamento do registro", slog.String("log_id", logID))
+		recordsWG.Done() // 🔹 Agora garantimos que será chamado corretamente
+	}()
+
+	// Gera o prompt para a IA
 	prompt := GeneratePromptForAI(record, headers, config)
 
-	// Formata o registro com a AI
-	contactDTO, err := AskAIToFormatRecord(prompt, logID)
+	// Envia para OpenAI
+	contactDTO, err := AskAIToFormatRecord(prompt, logID, log)
 	if err != nil {
-		log.Printf("[%s] Erro ao formatar registro: %v", logID, err)
+		log.Warn("Erro ao formatar registro",
+			slog.String("log_id", logID),
+			slog.String("error", err.Error()))
 		mu.Lock()
 		(*failedCount)++
 		mu.Unlock()
 		return
 	}
 
+	log.Debug("Contato formatado com sucesso", slog.String("log_id", logID))
+
+	// Normaliza os dados
 	contactDTO.Normalize()
 
-	// 🔹 Agora que temos dados mais limpos, verificamos se o contato já existe no banco
+	// 🔹 Verifica se o contato já existe
 	existingContact, _ := contactRepo.FindByEmailOrWhatsApp(accountID, contactDTO.Email, contactDTO.WhatsApp)
 	if existingContact != nil {
-		log.Printf("[%s] ✅ Contato já existe no banco. Ignorando registro.", logID)
+		log.Info("Contato já existe no banco, ignorando registro",
+			slog.String("log_id", logID))
 		return
 	}
 
+	// Criando o contato no banco
 	contact := models.Contact{
 		AccountID: accountID,
 		Name:      contactDTO.Name,
@@ -166,34 +199,44 @@ func processRecord(record []string, headers []string, config *dto.ConfigImportCo
 
 	_, err = contactRepo.Create(&contact)
 	if err != nil {
-		log.Printf("[%s] Erro ao salvar contato no DB: %v", logID, err)
+		log.Error("Erro ao salvar contato no banco de dados",
+			slog.String("log_id", logID),
+			slog.String("error", err.Error()))
 		mu.Lock()
 		(*failedCount)++
 		mu.Unlock()
 		return
 	}
 
+	log.Info("Contato processado com sucesso",
+		slog.String("log_id", logID),
+		slog.String("account_id", accountID.String()),
+		slog.String("name", contact.Name))
+
 	mu.Lock()
 	(*successCount)++
 	mu.Unlock()
 }
 
-func AskAIToFormatRecord(prompt string, logID string) (*dto.ContactCreateDTO, error) {
+// 📌 Envia o prompt para a OpenAI e recebe a resposta
+func AskAIToFormatRecord(prompt string, logID string, log *slog.Logger) (*dto.ContactCreateDTO, error) {
 	rateLimiter.Wait()
 	openaiAPIKey := os.Getenv("OPENAI_API_KEY")
 	if openaiAPIKey == "" {
 		return nil, fmt.Errorf("OPENAI_API_KEY não configurada")
 	}
 
-	log.Printf("📤 [%s] Enviando para OpenAI: %s", logID, prompt)
+	log.Debug("Enviando prompt para OpenAI",
+		slog.String("log_id", logID),
+		slog.String("prompt", prompt))
 
 	requestData := OpenAIRequest{
 		Model: "gpt-4o-mini",
 		Messages: []ChatMsg{
-			{Role: "system", Content: "Você é um assistente que retorna apenas JSON puro."},
+			{Role: "system", Content: "Você é um assistente que retorna exclusivamente JSON puro, sem marcações de código, sem comentários e sem texto adicional. Apenas retorne um objeto JSON válido."},
 			{Role: "user", Content: prompt},
 		},
-		Temperatura: 0.7,
+		Temperature: 0.7,
 	}
 
 	reqBody, err := json.Marshal(requestData)
@@ -226,18 +269,20 @@ func AskAIToFormatRecord(prompt string, logID string) (*dto.ContactCreateDTO, er
 		return nil, fmt.Errorf("nenhuma resposta válida da OpenAI")
 	}
 
-	rawJSON := aiResponse.Choices[0].Message.Content
+	// Extrai o JSON da resposta
+	cleanJSON := utils.SanitizeJSONResponse(aiResponse.Choices[0].Message.Content)
 
-	if !utils.IsValidJSON(rawJSON) {
+	if !utils.IsValidJSON(cleanJSON) {
 		return nil, fmt.Errorf("JSON inválido da OpenAI")
 	}
 
 	var contactDTO dto.ContactCreateDTO
-	if err := json.Unmarshal([]byte(rawJSON), &contactDTO); err != nil {
+	if err := json.Unmarshal([]byte(cleanJSON), &contactDTO); err != nil {
 		return nil, fmt.Errorf("erro ao converter JSON para DTO: %w", err)
 	}
 
-	log.Printf("✅ [%s] Contato processado com sucesso", logID)
+	log.Info("Contato formatado com sucesso pela OpenAI",
+		slog.String("log_id", logID))
 
 	return &contactDTO, nil
 }
