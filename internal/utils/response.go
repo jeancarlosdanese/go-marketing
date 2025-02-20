@@ -23,3 +23,9 @@ func SendError(w http.ResponseWriter, status int, message string) {
 		Code:    status,
 	})
 }
+
+// SendSuccess retorna uma resposta JSON padronizada
+func SendSuccess(w http.ResponseWriter, status int, data interface{}) {
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(data)
+}

@@ -147,7 +147,7 @@ func processRecord(record []string, headers []string, config *dto.ConfigImportCo
 	// Envia para OpenAI
 	contactDTO, err := AskAIToFormatRecord(prompt, logID, log)
 	if err != nil {
-		log.Warn("Erro ao formatar registro",
+		log.Error("Erro ao formatar registro",
 			slog.String("log_id", logID),
 			slog.String("error", err.Error()))
 		mu.Lock()
@@ -262,7 +262,7 @@ func AskAIToFormatRecord(prompt string, logID string, log *slog.Logger) (*dto.Co
 	var aiResponse OpenAIResponse
 	err = json.NewDecoder(resp.Body).Decode(&aiResponse)
 	if err != nil {
-		return nil, fmt.Errorf("erro ao decodificar resposta da OpenAI: %w", err)
+		return nil, fmt.Errorf("erro ao decodificar resposta da OpenAI: %w - Body: %v", err, resp.Body)
 	}
 
 	if len(aiResponse.Choices) == 0 {

@@ -21,6 +21,9 @@ type Campaign struct {
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
+// Define the CampaignChannelsTypes
+var CampaignChannelsTypes = []string{"email", "whatsapp"}
+
 // ChannelsConfig define a estrutura dos canais e templates usados (email, whatsapp, etc.)
 type ChannelsConfig map[string]ChannelConfig
 

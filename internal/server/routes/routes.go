@@ -17,6 +17,7 @@ func NewRouter(
 	contactRepo db.ContactRepository,
 	templateRepo db.TemplateRepository,
 	campaignRepo db.CampaignRepository,
+	audienceRepo db.CampaignAudienceRepository,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -30,6 +31,7 @@ func NewRouter(
 	RegisterContactRoutes(mux, authMiddleware, contactRepo)
 	RegisterTemplateRoutes(mux, authMiddleware, templateRepo)
 	RegisterCampaignRoutes(mux, authMiddleware, campaignRepo)
+	RegisterCampaignAudienceRoutes(mux, authMiddleware, campaignRepo, contactRepo, audienceRepo)
 
 	// 🔥 Rota de Health Check
 	mux.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
