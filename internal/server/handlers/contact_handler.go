@@ -51,10 +51,7 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 		defer r.Body.Close()
 
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// Definir AccountID como a conta autenticada
 		contactDTO.AccountID = authAccount.ID
@@ -127,10 +124,7 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 // 📌 Buscar Todos os Contatos
 func (h *contactHandle) GetAllContactsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		filters := utils.ExtractQueryFilters(r.URL.Query(), []string{"name", "email", "whatsapp", "cidade", "estado", "bairro", "tags", "interesses", "perfil", "eventos"})
 		contacts, err := h.repo.GetByAccountID(authAccount.ID, filters)
@@ -153,10 +147,7 @@ func (h *contactHandle) GetAllContactsHandler() http.HandlerFunc {
 // 📌 Buscar Contato Específico
 func (h *contactHandle) GetContactHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		contactID, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {
@@ -197,10 +188,7 @@ func (h *contactHandle) UpdateContactHandler() http.HandlerFunc {
 		defer r.Body.Close()
 
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 📌 Capturar `contact_id` da URL
 		contactID, err := uuid.Parse(r.PathValue("id"))
@@ -281,10 +269,7 @@ func (h *contactHandle) UpdateContactHandler() http.HandlerFunc {
 // 📌 Deletar Contato
 func (h *contactHandle) DeleteContactHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		contactID, err := uuid.Parse(r.PathValue("id"))
 		if err != nil {

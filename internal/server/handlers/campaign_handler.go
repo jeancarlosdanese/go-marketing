@@ -51,10 +51,7 @@ func (h *campaignHandle) CreateCampaignHandler() http.HandlerFunc {
 		defer r.Body.Close()
 
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// Validar DTO
 		if err := campaignDTO.Validate(); err != nil {
@@ -90,10 +87,7 @@ func (h *campaignHandle) CreateCampaignHandler() http.HandlerFunc {
 func (h *campaignHandle) GetCampaignHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Capturar `campaign_id` da URL
 		campaignIDParam := r.PathValue("campaign_id")
@@ -133,10 +127,7 @@ func (h *campaignHandle) GetCampaignHandler() http.HandlerFunc {
 func (h *campaignHandle) GetAllCampaignsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Buscar todas as campanhas da conta autenticada
 		campaigns, err := h.repo.GetAllByAccountID(authAccount.ID)
@@ -172,10 +163,7 @@ func (h *campaignHandle) UpdateCampaignHandler() http.HandlerFunc {
 		defer r.Body.Close()
 
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Capturar `campaign_id` da URL
 		campaignIDParam := r.PathValue("campaign_id")
@@ -254,10 +242,7 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Capturar `campaign_id` da URL
 		campaignIDParam := r.PathValue("campaign_id")
@@ -306,10 +291,7 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 func (h *campaignHandle) DeleteCampaignHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		campaignID := r.PathValue("campaign_id")
 

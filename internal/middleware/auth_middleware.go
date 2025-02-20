@@ -64,14 +64,12 @@ func GetAuthenticatedAccount(ctx context.Context) (*models.Account, bool) {
 }
 
 // GetAuthAccountOrFail retorna a conta autenticada ou responde com erro caso não exista
-func GetAuthAccountOrFail(ctx context.Context, w http.ResponseWriter, log *slog.Logger) (*models.Account, bool) {
-	// TODO: Mudar para retornat apensa a conta
+func GetAuthAccountOrFail(ctx context.Context, w http.ResponseWriter, log *slog.Logger) *models.Account {
 	authAccount, ok := GetAuthenticatedAccount(ctx)
 	if !ok {
 		log.Error("Conta não encontrada no contexto")
 		utils.SendError(w, http.StatusInternalServerError, "Conta não encontrada no contexto")
-		return nil, false
+		return nil
 	}
-
-	return authAccount, true
+	return authAccount
 }

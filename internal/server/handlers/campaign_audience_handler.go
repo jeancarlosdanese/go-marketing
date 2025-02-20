@@ -45,7 +45,7 @@ func NewCampaignAudienceHandle(
 func (h *campaignAudienceHandle) AddContactsToCampaignHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
-		authAccount := r.Context().Value(middleware.AuthAccountKey).(*models.Account)
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		var requestDTO dto.CampaignAudienceCreateDTO
 
@@ -145,7 +145,7 @@ func (h *campaignAudienceHandle) GetCampaignAudienceHandler() http.HandlerFunc {
 
 func (h *campaignAudienceHandle) getCampaignIDFromRequest(r *http.Request, w http.ResponseWriter) uuid.UUID {
 	// 🔍 Buscar conta autenticada
-	authAccount := r.Context().Value(middleware.AuthAccountKey).(*models.Account)
+	authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 	// 🔍 Capturar `campaign_id` da URL
 	campaignIDParam := r.PathValue("campaign_id")

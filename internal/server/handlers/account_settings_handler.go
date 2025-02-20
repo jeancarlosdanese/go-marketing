@@ -48,10 +48,7 @@ func (h *accountSettingsHandle) CreateAccountSettingsHandler() http.HandlerFunc 
 		defer r.Body.Close()
 
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// Se não for admin ou (settingsDTO.AccountID == nil), define `AccountID` automaticamente
 		if !authAccount.IsAdmin() || settingsDTO.AccountID == nil {
@@ -94,10 +91,7 @@ func (h *accountSettingsHandle) CreateAccountSettingsHandler() http.HandlerFunc 
 func (h *accountSettingsHandle) GetAccountSettingsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Capturar `account_id` da URL (se existir)
 		accountIDParam := r.PathValue("account_id")
@@ -155,10 +149,7 @@ func (h *accountSettingsHandle) UpdateAccountSettingsHandler() http.HandlerFunc 
 		defer r.Body.Close()
 
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// Verifica se é admin e define o `accountID`
 		var accountID uuid.UUID
@@ -239,10 +230,7 @@ func (h *accountSettingsHandle) UpdateAccountSettingsHandler() http.HandlerFunc 
 func (h *accountSettingsHandle) DeleteAccountSettingsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Capturar `account_id` da URL (se existir)
 		accountIDParam := r.PathValue("account_id")

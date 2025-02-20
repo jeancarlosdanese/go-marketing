@@ -52,10 +52,7 @@ func (h *templateHandle) CreateTemplateHandler() http.HandlerFunc {
 		defer r.Body.Close()
 
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// Apenas admins podem definir `account_id`
 		if !authAccount.IsAdmin() {
@@ -93,10 +90,7 @@ func (h *templateHandle) CreateTemplateHandler() http.HandlerFunc {
 func (h *templateHandle) GetAllTemplatesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Buscar templates no banco
 		templates, err := h.repo.GetByAccountID(authAccount.ID)
@@ -122,10 +116,7 @@ func (h *templateHandle) GetAllTemplatesHandler() http.HandlerFunc {
 func (h *templateHandle) GetTemplateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		templateID := r.PathValue("id")
 		id, err := uuid.Parse(templateID)
@@ -167,10 +158,7 @@ func (h *templateHandle) UpdateTemplateHandler() http.HandlerFunc {
 		defer r.Body.Close()
 
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		templateID := r.PathValue("id")
 		id, err := uuid.Parse(templateID)
@@ -220,10 +208,7 @@ func (h *templateHandle) UpdateTemplateHandler() http.HandlerFunc {
 func (h *templateHandle) DeleteTemplateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		id := r.PathValue("id")
 		templateID, err := uuid.Parse(id)
@@ -269,10 +254,7 @@ func (h *templateHandle) UploadTemplateFileHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Buscar template no banco
 		existingTemplate, err := h.repo.GetByID(templateID)

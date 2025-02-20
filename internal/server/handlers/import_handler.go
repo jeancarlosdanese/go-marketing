@@ -37,10 +37,7 @@ func NewImportHandler(repo db.ContactRepository) ImportHandler {
 func (h *importHandler) UploadCSVHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
-		authAccount, ok := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
-		if !ok {
-			return
-		}
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 📌 Ler o JSON de configuração enviado no campo "config"
 		configJSON := r.FormValue("config")
