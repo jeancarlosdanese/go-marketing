@@ -7,12 +7,19 @@ import (
 
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/server/handlers"
+	"github.com/jeancarlosdanese/go-marketing/internal/service"
 )
 
 // RegisterCampaignRoutes adiciona as rotas relacionadas às campanhas
-func RegisterCampaignRoutes(mux *http.ServeMux, authMiddleware func(http.Handler) http.HandlerFunc, campaignRepo db.CampaignRepository) {
+func RegisterCampaignRoutes(
+	mux *http.ServeMux,
+	authMiddleware func(http.Handler) http.HandlerFunc,
+	campaignRepo db.CampaignRepository,
+	audienceRepo db.CampaignAudienceRepository,
+	workerService service.WorkerService,
+) {
 
-	handler := handlers.NewCampaignHandle(campaignRepo)
+	handler := handlers.NewCampaignHandle(campaignRepo, audienceRepo, workerService)
 
 	// Criar campanha
 	mux.Handle("POST /campaigns", authMiddleware(handler.CreateCampaignHandler()))

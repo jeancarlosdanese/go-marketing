@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/middleware"
+	"github.com/jeancarlosdanese/go-marketing/internal/service"
 )
 
 // NewRouter cria e retorna um roteador HTTP configurado.
@@ -18,6 +19,7 @@ func NewRouter(
 	templateRepo db.TemplateRepository,
 	campaignRepo db.CampaignRepository,
 	audienceRepo db.CampaignAudienceRepository,
+	workerService service.WorkerService,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -30,8 +32,9 @@ func NewRouter(
 	RegisterAccountSettingsRoutes(mux, authMiddleware, accountSettingsRepo)
 	RegisterContactRoutes(mux, authMiddleware, contactRepo)
 	RegisterTemplateRoutes(mux, authMiddleware, templateRepo)
-	RegisterCampaignRoutes(mux, authMiddleware, campaignRepo)
+	RegisterCampaignRoutes(mux, authMiddleware, campaignRepo, audienceRepo, workerService)
 	RegisterCampaignAudienceRoutes(mux, authMiddleware, campaignRepo, contactRepo, audienceRepo)
+	RegisterSESFeedBackRoutes(mux, audienceRepo)
 
 	// 🔥 Rota de Health Check
 	mux.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -45,7 +45,7 @@ func NewCampaignAudienceHandle(
 func (h *campaignAudienceHandle) AddContactsToCampaignHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
-		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
+		authAccount := r.Context().Value(middleware.AuthAccountKey).(*models.Account)
 
 		var requestDTO dto.CampaignAudienceCreateDTO
 
@@ -68,7 +68,7 @@ func (h *campaignAudienceHandle) AddContactsToCampaignHandler() http.HandlerFunc
 		campaignID := h.getCampaignIDFromRequest(r, w)
 
 		// 🔍 Buscar contatos e garantir que pertencem ao usuário autenticado
-		var validContacts []uuid.UUID
+		var validContacts []models.Contact
 		for _, contactID := range requestDTO.ContactIDs {
 			contact, err := h.contactRepo.GetByID(contactID)
 			if err != nil || contact == nil {
@@ -79,7 +79,7 @@ func (h *campaignAudienceHandle) AddContactsToCampaignHandler() http.HandlerFunc
 				h.log.Warn("Usuário tentou adicionar contato de outra conta", "user_id", authAccount.ID, "contact_id", contactID)
 				continue
 			}
-			validContacts = append(validContacts, contactID)
+			validContacts = append(validContacts, *contact)
 		}
 
 		if len(validContacts) == 0 {
@@ -91,15 +91,26 @@ func (h *campaignAudienceHandle) AddContactsToCampaignHandler() http.HandlerFunc
 		// 🚀 Criar registros na tabela `campaign_audience`
 		var audiences []models.CampaignAudience
 
+		// 🔄 Adicionar contatos para todos os tipos de canais
 		if requestDTO.Type == nil {
 			for _, channelType := range models.CampaignChannelsTypes {
-				for _, contactID := range validContacts {
-					audiences = append(audiences, *models.NewCampaignAudience(campaignID, contactID, channelType))
+				for _, contact := range validContacts {
+					// 🛑 Ignorar contatos sem o canal especificado
+					if channelType == models.WhatsappChannel && contact.WhatsApp == nil || channelType == models.EmailChannel && contact.Email == nil {
+						continue
+					}
+
+					audiences = append(audiences, *models.NewCampaignAudience(campaignID, contact.ID, channelType))
 				}
 			}
-		} else {
-			for _, contactID := range validContacts {
-				audiences = append(audiences, *models.NewCampaignAudience(campaignID, contactID, *requestDTO.Type))
+		} else { // 🔄 Adicionar contatos para um tipo específico de canal
+			for _, contact := range validContacts {
+				// 🛑 Ignorar contatos sem o canal especificado
+				if *requestDTO.Type == models.WhatsappChannel && contact.WhatsApp == nil || *requestDTO.Type == models.EmailChannel && contact.Email == nil {
+					continue
+				}
+
+				audiences = append(audiences, *models.NewCampaignAudience(campaignID, contact.ID, *requestDTO.Type))
 			}
 		}
 
@@ -131,21 +142,15 @@ func (h *campaignAudienceHandle) GetCampaignAudienceHandler() http.HandlerFunc {
 			return
 		}
 
-		// 🔄 Converter para DTO
-		var response []dto.CampaignAudienceResponseDTO
-		for _, aud := range audience {
-			response = append(response, dto.NewCampaignAudienceResponseDTO(&aud))
-		}
-
-		h.log.Info("Audiência recuperada com sucesso", "campaign_id", campaignID, "total", len(response))
+		h.log.Info("Audiência recuperada com sucesso", "campaign_id", campaignID, "total", len(audience))
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(response)
+		json.NewEncoder(w).Encode(audience)
 	}
 }
 
 func (h *campaignAudienceHandle) getCampaignIDFromRequest(r *http.Request, w http.ResponseWriter) uuid.UUID {
 	// 🔍 Buscar conta autenticada
-	authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
+	authAccount := r.Context().Value(middleware.AuthAccountKey).(*models.Account)
 
 	// 🔍 Capturar `campaign_id` da URL
 	campaignIDParam := r.PathValue("campaign_id")

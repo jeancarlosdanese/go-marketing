@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
+	"github.com/jeancarlosdanese/go-marketing/internal/dto"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
 )
@@ -58,14 +59,20 @@ func (r *campaignAudienceRepo) AddContactsToCampaign(campaignID uuid.UUID, conta
 	return audiences, nil
 }
 
-// Retorna a audiência de uma campanha, podendo filtrar por tipo (email ou whatsapp)
-func (r *campaignAudienceRepo) GetCampaignAudience(campaignID uuid.UUID, contactType *string) ([]models.CampaignAudience, error) {
-	query := `SELECT id, campaign_id, contact_id, "type", status, message_id, feedback_api, created_at, updated_at
-FROM campaigns_audience WHERE campaign_id = $1`
+// GetCampaignAudience retorna a audiência de uma campanha junto com os detalhes dos contatos
+func (r *campaignAudienceRepo) GetCampaignAudience(campaignID uuid.UUID, contactType *string) ([]dto.CampaignMessageDTO, error) {
+	query := `
+		SELECT ca.id, ca.campaign_id, ca.contact_id, ca.type, ca.status,
+		       c.name, c.email, c.whatsapp, c.gender, c.birth_date, 
+		       c.bairro, c.cidade, c.estado, c.tags, c.history, 
+		       c.opt_out_at, c.last_contact_at, c.created_at, c.updated_at
+		FROM campaigns_audience ca
+		INNER JOIN contacts c ON ca.contact_id = c.id
+		WHERE ca.campaign_id = $1`
 	args := []interface{}{campaignID}
 
 	if contactType != nil {
-		query += " AND type = $2"
+		query += " AND ca.type = $2"
 		args = append(args, *contactType)
 	}
 
@@ -75,15 +82,29 @@ FROM campaigns_audience WHERE campaign_id = $1`
 	}
 	defer rows.Close()
 
-	var contacts []models.CampaignAudience
+	var messages []dto.CampaignMessageDTO
 	for rows.Next() {
-		var contact models.CampaignAudience
-		if err := rows.Scan(&contact.ID, &contact.CampaignID, &contact.ContactID, &contact.Type, &contact.Status, &contact.MessageID, &contact.Feedback, &contact.CreatedAt, &contact.UpdatedAt); err != nil {
+		var msg dto.CampaignMessageDTO
+		var tagsJSON []byte
+
+		if err := rows.Scan(
+			&msg.ID, &msg.CampaignID, &msg.ContactID, &msg.Type, &msg.Status,
+			&msg.Name, &msg.Email, &msg.WhatsApp, &msg.Gender, &msg.BirthDate,
+			&msg.Bairro, &msg.Cidade, &msg.Estado, &tagsJSON, &msg.History,
+			&msg.OptOutAt, &msg.LastContactAt, &msg.CreatedAt, &msg.UpdatedAt,
+		); err != nil {
 			return nil, err
 		}
-		contacts = append(contacts, contact)
+
+		// Converter JSONB das tags para map[string]interface{}
+		if err := json.Unmarshal(tagsJSON, &msg.Tags); err != nil {
+			msg.Tags = make(map[string]interface{}) // Se der erro, inicializa vazio
+		}
+
+		messages = append(messages, msg)
 	}
-	return contacts, nil
+
+	return messages, nil
 }
 
 // Remove um contato da audiência
@@ -103,4 +124,21 @@ func (r *campaignAudienceRepo) UpdateStatus(contactID uuid.UUID, status, message
 		UPDATE campaigns_audience SET status = $1, message_id = $2, feedback_api = $3 WHERE contact_id = $4
 	`, status, messageID, feedbackJSON, contactID)
 	return err
+}
+
+// UpdateStatusByMessageID atualiza o status de uma mensagem usando o message_id
+func (r *campaignAudienceRepo) UpdateStatusByMessageID(messageID string, status string, feedbackAPI *string) error {
+	query := `
+		UPDATE campaigns_audience 
+		SET status = $1, feedback_api = $2, updated_at = NOW()
+		WHERE message_id = $3;
+	`
+	_, err := r.db.Exec(query, status, feedbackAPI, messageID)
+	if err != nil {
+		r.log.Error("❌ Erro ao atualizar status por message_id: %s, erro: %v", messageID, err)
+		return err
+	}
+
+	r.log.Info("✅ Status atualizado com sucesso para message_id: %s -> %s", messageID, status)
+	return nil
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/middleware"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
+	"github.com/jeancarlosdanese/go-marketing/internal/service"
 	"github.com/jeancarlosdanese/go-marketing/internal/utils"
 )
 
@@ -26,14 +27,22 @@ type CampaignHandle interface {
 }
 
 type campaignHandle struct {
-	log  *slog.Logger
-	repo db.CampaignRepository
+	log           *slog.Logger
+	campaignRepo  db.CampaignRepository
+	audienceRepo  db.CampaignAudienceRepository
+	workerService service.WorkerService
 }
 
-func NewCampaignHandle(repo db.CampaignRepository) CampaignHandle {
+func NewCampaignHandle(
+	campaignRepo db.CampaignRepository,
+	audienceRepo db.CampaignAudienceRepository,
+	workerService service.WorkerService,
+) CampaignHandle {
 	return &campaignHandle{
-		log:  logger.GetLogger(),
-		repo: repo,
+		log:           logger.GetLogger(),
+		campaignRepo:  campaignRepo,
+		audienceRepo:  audienceRepo,
+		workerService: workerService,
 	}
 }
 
@@ -70,7 +79,7 @@ func (h *campaignHandle) CreateCampaignHandler() http.HandlerFunc {
 			Status:      "pendente",
 		}
 
-		createdCampaign, err := h.repo.Create(campaign)
+		createdCampaign, err := h.campaignRepo.Create(campaign)
 		if err != nil {
 			h.log.Error("Erro ao criar campanha", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao criar campanha")
@@ -99,7 +108,7 @@ func (h *campaignHandle) GetCampaignHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Buscar campanha no banco
-		campaign, err := h.repo.GetByID(campaignID)
+		campaign, err := h.campaignRepo.GetByID(campaignID)
 		if err != nil {
 			h.log.Error("Erro ao buscar campanha", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar campanha")
@@ -130,7 +139,7 @@ func (h *campaignHandle) GetAllCampaignsHandler() http.HandlerFunc {
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Buscar todas as campanhas da conta autenticada
-		campaigns, err := h.repo.GetAllByAccountID(authAccount.ID)
+		campaigns, err := h.campaignRepo.GetAllByAccountID(authAccount.ID)
 		if err != nil {
 			h.log.Error("Erro ao buscar campanhas", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar campanhas")
@@ -175,7 +184,7 @@ func (h *campaignHandle) UpdateCampaignHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Buscar campanha
-		campaign, err := h.repo.GetByID(campaignID)
+		campaign, err := h.campaignRepo.GetByID(campaignID)
 		if err != nil || campaign == nil {
 			utils.SendError(w, http.StatusNotFound, "Campanha não encontrada")
 			return
@@ -208,7 +217,7 @@ func (h *campaignHandle) UpdateCampaignHandler() http.HandlerFunc {
 		}
 
 		// Atualizar campanha no banco
-		updatedCampaign, err := h.repo.UpdateByID(campaignID, campaign)
+		updatedCampaign, err := h.campaignRepo.UpdateByID(campaignID, campaign)
 		if err != nil {
 			h.log.Error("Erro ao atualizar campanha", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar campanha")
@@ -254,7 +263,7 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Buscar campanha
-		campaign, err := h.repo.GetByID(campaignID)
+		campaign, err := h.campaignRepo.GetByID(campaignID)
 		if err != nil || campaign == nil {
 			utils.SendError(w, http.StatusNotFound, "Campanha não encontrada")
 			return
@@ -266,15 +275,32 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 			return
 		}
 
-		// Validar novo status
-		if err := statusDTO.Validate(); err != nil {
-			utils.SendError(w, http.StatusBadRequest, err.Error())
-			return
+		// 🔍 Se for ativar a campanha, verificar se há contatos na audiência
+		if statusDTO.Status == "ativa" {
+			audience, err := h.audienceRepo.GetCampaignAudience(campaignID, nil)
+			if err != nil {
+				h.log.Error("Erro ao buscar audiência", "campaign_id", campaignID, "error", err)
+				utils.SendError(w, http.StatusInternalServerError, "Erro ao verificar audiência")
+				return
+			}
+			if len(audience) == 0 {
+				h.log.Warn("Tentativa de ativar campanha sem audiência", "campaign_id", campaignID)
+				utils.SendError(w, http.StatusBadRequest, "Não é possível ativar uma campanha sem audiência")
+				return
+			}
+
+			// 🚀 Inicia o worker em background para enviar mensagens
+			go func() {
+				h.log.Info("Iniciando worker de envio de mensagens", "campaign_id", campaignID)
+				if err := h.workerService.ProcessCampaign(campaign, audience); err != nil {
+					h.log.Error("Erro no processamento da campanha", "campaign_id", campaignID, "error", err)
+				}
+			}()
 		}
 
-		// Atualizar status
+		// ✅ Atualizar status da campanha
 		campaign.Status = statusDTO.Status
-		if err := h.repo.UpdateStatus(campaignID, campaign.Status); err != nil {
+		if err := h.campaignRepo.UpdateStatus(campaignID, campaign.Status); err != nil {
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar status")
 			return
 		}
@@ -296,7 +322,7 @@ func (h *campaignHandle) DeleteCampaignHandler() http.HandlerFunc {
 		campaignID := r.PathValue("campaign_id")
 
 		// 🔍 Buscar campanha
-		campaign, err := h.repo.GetByID(uuid.MustParse(campaignID))
+		campaign, err := h.campaignRepo.GetByID(uuid.MustParse(campaignID))
 		if err != nil || campaign == nil {
 			utils.SendError(w, http.StatusNotFound, "Campanha não encontrada")
 			return
@@ -308,7 +334,7 @@ func (h *campaignHandle) DeleteCampaignHandler() http.HandlerFunc {
 			return
 		}
 
-		err = h.repo.DeleteByID(uuid.MustParse(campaignID))
+		err = h.campaignRepo.DeleteByID(uuid.MustParse(campaignID))
 		if err != nil {
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao deletar campanha")
 			return

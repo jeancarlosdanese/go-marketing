@@ -83,6 +83,7 @@ type CampaignResponseDTO struct {
 	Filters     models.AudienceFilters `json:"filters"`
 	Status      string                 `json:"status"`
 	CreatedAt   string                 `json:"created_at"`
+	UpdatedAt   string                 `json:"updated_at"`
 }
 
 // NewCampaignResponseDTO converte um modelo `Campaign` para um DTO de resposta
@@ -96,5 +97,6 @@ func NewCampaignResponseDTO(campaign *models.Campaign) CampaignResponseDTO {
 		Filters:     campaign.Filters,
 		Status:      campaign.Status,
 		CreatedAt:   campaign.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:   campaign.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
 }

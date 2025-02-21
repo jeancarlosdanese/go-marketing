@@ -21,15 +21,15 @@ type ImportHandler interface {
 }
 
 type importHandler struct {
-	log  *slog.Logger
-	repo db.ContactRepository
+	log          *slog.Logger
+	contatctRepo db.ContactRepository
 }
 
 // NewImportHandler cria uma instância do ImportHandler
-func NewImportHandler(repo db.ContactRepository) ImportHandler {
+func NewImportHandler(contatctRepo db.ContactRepository) ImportHandler {
 	return &importHandler{
-		log:  logger.GetLogger(),
-		repo: repo,
+		log:          logger.GetLogger(),
+		contatctRepo: contatctRepo,
 	}
 }
 
@@ -69,7 +69,7 @@ func (h *importHandler) UploadCSVHandler() http.HandlerFunc {
 		defer file.Close()
 
 		// 📌 Processar CSV e salvar no banco
-		successCount, failedCount, err := service.ProcessCSVAndSaveDB(file, h.repo, authAccount.ID, &config)
+		successCount, failedCount, err := service.ProcessCSVAndSaveDB(file, h.contatctRepo, authAccount.ID, &config)
 		if err != nil {
 			h.log.Error("Erro ao processar CSV",
 				slog.String("account_id", authAccount.ID.String()),
