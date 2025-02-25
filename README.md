@@ -19,7 +19,7 @@ API desenvolvida em **Go** para envio de campanhas de **e-mail e WhatsApp**, com
 - [Golang](https://golang.org/) (Backend)
 - [PostgreSQL](https://www.postgresql.org/) (Banco de Dados)
 - [Next.js](https://nextjs.org/) (Frontend)
-- [n8n](https://n8n.io/) (Integração com WhatsApp)
+- [Evolution API]([[https://n8n.io/](https://doc.evolution-api.com/v2/pt/get-started/introduction)]) (Integração com WhatsApp)
 
 ---
 
