@@ -59,3 +59,7 @@ main.exe
 
 .air.toml
 ./.air.toml
+
+internal_docs
+/internal_docs/
+./internal_docs/*

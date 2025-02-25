@@ -1,3 +1,5 @@
+-- File: /migrations/002_account_otps.sql
+
 CREATE TABLE account_otps (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id UUID REFERENCES accounts(id) ON DELETE CASCADE,

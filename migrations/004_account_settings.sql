@@ -1,3 +1,5 @@
+-- File: /migrations/004_account_settings.sql
+
 CREATE TABLE account_settings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     account_id UUID REFERENCES accounts(id) ON DELETE CASCADE,

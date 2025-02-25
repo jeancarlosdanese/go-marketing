@@ -1,3 +1,5 @@
+-- File: /migrations/005_create_contacts.sql
+
 CREATE TABLE contacts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,

@@ -13,7 +13,7 @@ import (
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
 )
 
-var secretKey = []byte("MINHA_CHAVE_SECRETA")
+var secretKey = []byte(os.Getenv("JWT_SECRET_KEY"))
 
 // GenerateJWT cria um token válido por 7 dias
 func GenerateJWT(accountID string) (string, error) {

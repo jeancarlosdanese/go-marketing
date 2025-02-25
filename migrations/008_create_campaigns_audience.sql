@@ -1,3 +1,5 @@
+-- File: /migrations/008_create_campaigns_audience.sql
+
 CREATE TABLE campaigns_audience (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,

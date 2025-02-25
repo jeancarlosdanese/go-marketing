@@ -1,4 +1,4 @@
--- File: migrations/009_create_campaign_settings.sql
+-- File: /migrations/009_create_campaign_settings.sql
 
 CREATE TABLE campaign_settings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

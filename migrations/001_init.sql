@@ -1,3 +1,5 @@
+-- File: /migrations/001_init.sql
+
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE accounts (
