@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/dto"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
@@ -99,13 +98,7 @@ func (h *campaignHandle) GetCampaignHandler() http.HandlerFunc {
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Capturar `campaign_id` da URL
-		campaignIDParam := r.PathValue("campaign_id")
-		campaignID, err := uuid.Parse(campaignIDParam)
-		if err != nil {
-			h.log.Warn("ID inválido informado", "campaign_id", campaignIDParam)
-			utils.SendError(w, http.StatusBadRequest, "ID inválido")
-			return
-		}
+		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
 
 		// 🔍 Buscar campanha no banco
 		campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
@@ -119,10 +112,10 @@ func (h *campaignHandle) GetCampaignHandler() http.HandlerFunc {
 			return
 		}
 
-		// ⚠️ Usuário só pode acessar suas próprias campanhas
-		if !authAccount.IsAdmin() && authAccount.ID != campaign.AccountID {
-			h.log.Warn("Usuário tentou acessar campanha de outra conta", "user_id", authAccount.ID, "requested_id", campaign.AccountID)
-			utils.SendError(w, http.StatusForbidden, "Acesso negado")
+		// Checar se é admin ou dono
+		if !middleware.IsAdminOrOwner(authAccount, campaign.AccountID) {
+			h.log.Warn("Apenas administradores podem buscar outras contas")
+			utils.SendError(w, http.StatusForbidden, "Apenas administradores podem buscar outras contas")
 			return
 		}
 
@@ -175,13 +168,7 @@ func (h *campaignHandle) UpdateCampaignHandler() http.HandlerFunc {
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Capturar `campaign_id` da URL
-		campaignIDParam := r.PathValue("campaign_id")
-		campaignID, err := uuid.Parse(campaignIDParam)
-		if err != nil {
-			h.log.Warn("ID inválido informado", "campaign_id", campaignIDParam)
-			utils.SendError(w, http.StatusBadRequest, "ID inválido")
-			return
-		}
+		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
 
 		// 🔍 Buscar campanha
 		campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
@@ -190,9 +177,10 @@ func (h *campaignHandle) UpdateCampaignHandler() http.HandlerFunc {
 			return
 		}
 
-		// ⚠️ Usuário só pode modificar suas próprias campanhas
-		if !authAccount.IsAdmin() && authAccount.ID != campaign.AccountID {
-			utils.SendError(w, http.StatusForbidden, "Acesso negado")
+		// Checar se é admin ou dono
+		if !middleware.IsAdminOrOwner(authAccount, campaign.AccountID) {
+			h.log.Warn("Apenas administradores podem buscar outras contas")
+			utils.SendError(w, http.StatusForbidden, "Apenas administradores podem buscar outras contas")
 			return
 		}
 
@@ -254,13 +242,7 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Capturar `campaign_id` da URL
-		campaignIDParam := r.PathValue("campaign_id")
-		campaignID, err := uuid.Parse(campaignIDParam)
-		if err != nil {
-			h.log.Warn("ID inválido informado", "campaign_id", campaignIDParam)
-			utils.SendError(w, http.StatusBadRequest, "ID inválido")
-			return
-		}
+		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
 
 		// 🔍 Buscar campanha
 		campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
@@ -269,9 +251,10 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 			return
 		}
 
-		// ⚠️ Usuário só pode modificar suas próprias campanhas
-		if !authAccount.IsAdmin() && authAccount.ID != campaign.AccountID {
-			utils.SendError(w, http.StatusForbidden, "Acesso negado")
+		// Checar se é admin ou dono
+		if !middleware.IsAdminOrOwner(authAccount, campaign.AccountID) {
+			h.log.Warn("Apenas administradores podem buscar outras contas")
+			utils.SendError(w, http.StatusForbidden, "Apenas administradores podem buscar outras contas")
 			return
 		}
 
@@ -319,22 +302,24 @@ func (h *campaignHandle) DeleteCampaignHandler() http.HandlerFunc {
 		// 🔍 Buscar conta autenticada
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
-		campaignID := r.PathValue("campaign_id")
+		// 🔍 Capturar `campaign_id` da URL
+		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
 
 		// 🔍 Buscar campanha
-		campaign, err := h.campaignRepo.GetByID(r.Context(), uuid.MustParse(campaignID))
+		campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
 		if err != nil || campaign == nil {
 			utils.SendError(w, http.StatusNotFound, "Campanha não encontrada")
 			return
 		}
 
-		// ⚠️ Usuário só pode deletar suas próprias campanhas
-		if !authAccount.IsAdmin() && authAccount.ID != campaign.AccountID {
-			utils.SendError(w, http.StatusForbidden, "Acesso negado")
+		// Checar se é admin ou dono
+		if !middleware.IsAdminOrOwner(authAccount, campaign.AccountID) {
+			h.log.Warn("Apenas administradores podem buscar outras contas")
+			utils.SendError(w, http.StatusForbidden, "Apenas administradores podem buscar outras contas")
 			return
 		}
 
-		err = h.campaignRepo.DeleteByID(r.Context(), uuid.MustParse(campaignID))
+		err = h.campaignRepo.DeleteByID(r.Context(), campaignID)
 		if err != nil {
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao deletar campanha")
 			return

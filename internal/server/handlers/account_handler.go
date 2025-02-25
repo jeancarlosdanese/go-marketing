@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/dto"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
@@ -129,28 +128,23 @@ func (h *accountHandle) GetAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		accountID := r.PathValue("id")
-		id, err := uuid.Parse(accountID)
-		if err != nil {
-			h.log.Warn("ID inválido", "error", err)
-			utils.SendError(w, http.StatusBadRequest, "ID inválido")
-			return
-		}
+		accountID := utils.GetUUIDFromRequestPath(r, w, "id")
 
-		if !authAccount.IsAdmin() && authAccount.ID != id {
+		// Checar se é admin ou dono
+		if !middleware.IsAdminOrOwner(authAccount, accountID) {
 			h.log.Warn("Apenas administradores podem buscar outras contas")
 			utils.SendError(w, http.StatusForbidden, "Apenas administradores podem buscar outras contas")
 			return
 		}
 
-		account, err := h.repo.GetByID(r.Context(), id)
+		account, err := h.repo.GetByID(r.Context(), accountID)
 		if err != nil {
-			h.log.Warn("Conta não encontrada", "account_id", id.String())
+			h.log.Warn("Conta não encontrada", "account_id", accountID.String())
 			utils.SendError(w, http.StatusNotFound, "Conta não encontrada")
 			return
 		}
 
-		h.log.Debug("Conta encontrada", "account_id", id.String())
+		h.log.Debug("Conta encontrada", "account_id", accountID.String())
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(dto.NewAccountResponseDTO(account))
 	}
@@ -166,13 +160,8 @@ func (h *accountHandle) UpdateAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		accountID := r.PathValue("id")
-		id, err := uuid.Parse(accountID)
-		if err != nil {
-			h.log.Warn("ID inválido", "error", err)
-			utils.SendError(w, http.StatusBadRequest, "ID inválido")
-			return
-		}
+		// ID da conta a ser atualizada
+		accountID := utils.GetUUIDFromRequestPath(r, w, "id")
 
 		var updateDTO dto.AccountUpdateDTO
 		if err := json.NewDecoder(r.Body).Decode(&updateDTO); err != nil {
@@ -182,9 +171,10 @@ func (h *accountHandle) UpdateAccountHandler() http.HandlerFunc {
 		}
 		defer r.Body.Close()
 
-		if !authAccount.IsAdmin() && authAccount.ID != id {
-			h.log.Warn("Apenas administradores podem atualizar outras contas")
-			utils.SendError(w, http.StatusForbidden, "Apenas administradores podem atualizar outras contas")
+		// Checar se é admin ou dono
+		if !middleware.IsAdminOrOwner(authAccount, accountID) {
+			h.log.Warn("Apenas administradores podem buscar outras contas")
+			utils.SendError(w, http.StatusForbidden, "Apenas administradores podem buscar outras contas")
 			return
 		}
 
@@ -195,7 +185,7 @@ func (h *accountHandle) UpdateAccountHandler() http.HandlerFunc {
 		}
 
 		updateData, _ := json.Marshal(updateDTO)
-		updatedAccount, err := h.repo.UpdateByID(r.Context(), id, updateData)
+		updatedAccount, err := h.repo.UpdateByID(r.Context(), accountID, updateData)
 		if err != nil {
 			h.log.Error("Erro ao atualizar conta", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar conta")
@@ -218,13 +208,8 @@ func (h *accountHandle) DeleteAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		accountID := r.PathValue("id")
-		id, err := uuid.Parse(accountID)
-		if err != nil {
-			h.log.Warn("ID inválido", "error", err)
-			utils.SendError(w, http.StatusBadRequest, "ID inválido")
-			return
-		}
+		// ID da conta a ser atualizada
+		accountID := utils.GetUUIDFromRequestPath(r, w, "id")
 
 		if !authAccount.IsAdmin() {
 			h.log.Warn("Apenas administradores podem deletar contas")
@@ -232,14 +217,14 @@ func (h *accountHandle) DeleteAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		err = h.repo.DeleteByID(r.Context(), id)
+		err := h.repo.DeleteByID(r.Context(), accountID)
 		if err != nil {
 			h.log.Error("Erro ao deletar conta", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao deletar conta")
 			return
 		}
 
-		h.log.Info("Conta deletada", "account_id", id.String())
+		h.log.Info("Conta deletada", "account_id", accountID.String())
 		w.WriteHeader(http.StatusOK)
 		w.WriteHeader(http.StatusNoContent)
 	}

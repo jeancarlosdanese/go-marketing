@@ -94,26 +94,16 @@ func (h *accountSettingsHandle) GetAccountSettingsHandler() http.HandlerFunc {
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Capturar `account_id` da URL (se existir)
-		accountIDParam := r.PathValue("account_id")
-		var accountID uuid.UUID
-		var err error
+		accountID := utils.GetUUIDFromRequestPath(r, w, "account_id")
 
-		if accountIDParam == "" {
+		if accountID == uuid.Nil {
 			// Se nenhum `account_id` for passado, assumimos o do próprio usuário autenticado
 			accountID = authAccount.ID
 		} else {
-			// Verifica se o `account_id` na URL é válido
-			accountID, err = uuid.Parse(accountIDParam)
-			if err != nil {
-				h.log.Warn("ID inválido informado", "account_id", accountIDParam)
-				utils.SendError(w, http.StatusBadRequest, "ID inválido")
-				return
-			}
-
-			// ⚠️ Se não for Admin, não pode buscar configurações de outra conta
-			if !authAccount.IsAdmin() && authAccount.ID != accountID {
-				h.log.Warn("Usuário tentou acessar configurações de outra conta", "user_id", authAccount.ID, "requested_id", accountID)
-				utils.SendError(w, http.StatusForbidden, "Acesso negado")
+			// Checar se é admin ou dono
+			if !middleware.IsAdminOrOwner(authAccount, accountID) {
+				h.log.Warn("Apenas administradores podem buscar configurações de outras contas")
+				utils.SendError(w, http.StatusForbidden, "Apenas administradores podem buscar configurações de outras contas")
 				return
 			}
 		}
@@ -233,32 +223,22 @@ func (h *accountSettingsHandle) DeleteAccountSettingsHandler() http.HandlerFunc 
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Capturar `account_id` da URL (se existir)
-		accountIDParam := r.PathValue("account_id")
-		var accountID uuid.UUID
-		var err error
+		accountID := utils.GetUUIDFromRequestPath(r, w, "account_id")
 
-		if accountIDParam == "" {
+		if accountID == uuid.Nil {
 			// Se nenhum `account_id` for passado, assumimos o do próprio usuário autenticado
 			accountID = authAccount.ID
 		} else {
-			// Verifica se o `account_id` na URL é válido
-			accountID, err = uuid.Parse(accountIDParam)
-			if err != nil {
-				h.log.Warn("ID inválido informado", "account_id", accountIDParam)
-				utils.SendError(w, http.StatusBadRequest, "ID inválido")
-				return
-			}
-
-			// ⚠️ Se não for Admin, não pode buscar configurações de outra conta
-			if !authAccount.IsAdmin() && authAccount.ID != accountID {
-				h.log.Warn("Usuário tentou acessar configurações de outra conta", "user_id", authAccount.ID, "requested_id", accountID)
-				utils.SendError(w, http.StatusForbidden, "Acesso negado")
+			// Checar se é admin ou dono
+			if !middleware.IsAdminOrOwner(authAccount, accountID) {
+				h.log.Warn("Apenas administradores podem buscar outras contas")
+				utils.SendError(w, http.StatusForbidden, "Apenas administradores podem buscar outras contas")
 				return
 			}
 		}
 
 		// ❌ Deletar configurações
-		err = h.repo.DeleteByAccountID(r.Context(), accountID)
+		err := h.repo.DeleteByAccountID(r.Context(), accountID)
 		if err != nil {
 			h.log.Error("Erro ao deletar configurações da conta", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao deletar configurações")
