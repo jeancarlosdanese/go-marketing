@@ -9,3 +9,5 @@ CREATE TABLE campaigns_audience (
     created_at TIMESTAMP DEFAULT now(),
     updated_at TIMESTAMP DEFAULT now()
 );
+
+ALTER TABLE campaigns_audience ADD CONSTRAINT unique_campaign_contact UNIQUE (campaign_id, contact_id);

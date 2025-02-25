@@ -107,7 +107,7 @@ func (h *sesFeedbackHandler) HandleSESFeedback() http.HandlerFunc {
 			feedbackPtr = &feedback
 		}
 
-		err := h.audienceRepo.UpdateStatusByMessageID(sesEvent.Mail.MessageID, status, feedbackPtr)
+		err := h.audienceRepo.UpdateStatusByMessageID(r.Context(), sesEvent.Mail.MessageID, status, feedbackPtr)
 		if err != nil {
 			h.log.Error("❌ Erro ao atualizar status no banco", "error", err)
 			http.Error(w, "Erro interno", http.StatusInternalServerError)

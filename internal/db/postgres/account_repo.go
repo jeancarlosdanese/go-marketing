@@ -3,6 +3,7 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -33,7 +34,7 @@ func NewAccountRepository(db *sql.DB) db.AccountRepository {
 }
 
 // Create insere um novo registro na tabela accounts
-func (r *AccountRepoPostgres) Create(account *models.Account) (*models.Account, error) {
+func (r *AccountRepoPostgres) Create(ctx context.Context, account *models.Account) (*models.Account, error) {
 	r.log.Debug("Criando nova conta", "name", account.Name, "email", account.Email)
 
 	query := "INSERT INTO accounts (name, email, whatsapp) VALUES ($1, $2, $3) RETURNING id"
@@ -48,7 +49,7 @@ func (r *AccountRepoPostgres) Create(account *models.Account) (*models.Account, 
 }
 
 // GetByID busca uma conta pelo ID (usando UUID)
-func (r *AccountRepoPostgres) GetByID(id uuid.UUID) (*models.Account, error) {
+func (r *AccountRepoPostgres) GetByID(ctx context.Context, id uuid.UUID) (*models.Account, error) {
 	r.log.Debug("Buscando conta por ID", "id", id)
 
 	query := "SELECT id, name, email, whatsapp FROM accounts WHERE id = $1"
@@ -63,7 +64,7 @@ func (r *AccountRepoPostgres) GetByID(id uuid.UUID) (*models.Account, error) {
 }
 
 // GetAll busca todas as contas cadastradas
-func (r *AccountRepoPostgres) GetAll() ([]*models.Account, error) {
+func (r *AccountRepoPostgres) GetAll(ctx context.Context) ([]*models.Account, error) {
 	r.log.Debug("Buscando todas as contas")
 
 	query := "SELECT id, name, email, whatsapp FROM accounts ORDER BY name ASC"
@@ -85,7 +86,7 @@ func (r *AccountRepoPostgres) GetAll() ([]*models.Account, error) {
 }
 
 // UpdateByID atualiza uma conta a partir de um JSON
-func (r *AccountRepoPostgres) UpdateByID(id uuid.UUID, jsonData []byte) (*models.Account, error) {
+func (r *AccountRepoPostgres) UpdateByID(ctx context.Context, id uuid.UUID, jsonData []byte) (*models.Account, error) {
 	r.log.Debug("Atualizando conta por ID", "id", id)
 
 	// Decodificar o JSON para obter os campos a serem atualizados
@@ -124,7 +125,7 @@ func (r *AccountRepoPostgres) UpdateByID(id uuid.UUID, jsonData []byte) (*models
 }
 
 // DeleteByID remove uma conta pelo ID
-func (r *AccountRepoPostgres) DeleteByID(id uuid.UUID) error {
+func (r *AccountRepoPostgres) DeleteByID(ctx context.Context, id uuid.UUID) error {
 	r.log.Debug("Deletando conta", "id", id)
 
 	query := "DELETE FROM accounts WHERE id = $1 RETURNING id"

@@ -7,14 +7,15 @@ import (
 
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/server/handlers"
+	"github.com/jeancarlosdanese/go-marketing/internal/service"
 )
 
 // RegisterContactRoutes adiciona as rotas relacionadas a contatos
-func RegisterContactRoutes(mux *http.ServeMux, authMiddleware func(http.Handler) http.HandlerFunc, contactRepo db.ContactRepository) {
+func RegisterContactRoutes(mux *http.ServeMux, authMiddleware func(http.Handler) http.HandlerFunc, contactRepo db.ContactRepository, openAIService service.OpenAIService) {
 	handler := handlers.NewContactHandle(contactRepo)
 
 	// 📌 Importação de CSV
-	importHandler := handlers.NewImportHandler(contactRepo)
+	importHandler := handlers.NewImportHandler(contactRepo, openAIService)
 
 	// 🔒 Todas as rotas exigem autenticação
 	mux.Handle("POST /contacts", authMiddleware(handler.CreateContactHandler()))        // Criar contato

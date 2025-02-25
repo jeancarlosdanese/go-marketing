@@ -73,7 +73,7 @@ func (h *templateHandle) CreateTemplateHandler() http.HandlerFunc {
 			Description: templateDTO.Description,
 		}
 
-		createdTemplate, err := h.repo.Create(template)
+		createdTemplate, err := h.repo.Create(r.Context(), template)
 		if err != nil {
 			h.log.Error("Erro ao criar template", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao criar template")
@@ -93,7 +93,7 @@ func (h *templateHandle) GetAllTemplatesHandler() http.HandlerFunc {
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Buscar templates no banco
-		templates, err := h.repo.GetByAccountID(authAccount.ID)
+		templates, err := h.repo.GetByAccountID(r.Context(), authAccount.ID)
 		if err != nil {
 			h.log.Error("Erro ao buscar templates", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar templates")
@@ -127,7 +127,7 @@ func (h *templateHandle) GetTemplateHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Buscar template no banco
-		template, err := h.repo.GetByID(id)
+		template, err := h.repo.GetByID(r.Context(), id)
 		if err != nil {
 			h.log.Error("Erro ao buscar template", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar template")
@@ -169,7 +169,7 @@ func (h *templateHandle) UpdateTemplateHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Buscar template no banco
-		existingTemplate, err := h.repo.GetByID(id)
+		existingTemplate, err := h.repo.GetByID(r.Context(), id)
 		if err != nil || existingTemplate == nil || existingTemplate.AccountID != authAccount.ID {
 			utils.SendError(w, http.StatusNotFound, "Template não encontrado")
 			return
@@ -191,7 +191,7 @@ func (h *templateHandle) UpdateTemplateHandler() http.HandlerFunc {
 		}
 
 		// 🔄 Atualizar template no banco
-		updatedTemplate, err := h.repo.UpdateByID(id, existingTemplate)
+		updatedTemplate, err := h.repo.UpdateByID(r.Context(), id, existingTemplate)
 		if err != nil {
 			h.log.Error("Erro ao atualizar template", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar template")
@@ -219,14 +219,14 @@ func (h *templateHandle) DeleteTemplateHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Buscar template no banco
-		existingTemplate, err := h.repo.GetByID(templateID)
+		existingTemplate, err := h.repo.GetByID(r.Context(), templateID)
 		if err != nil || existingTemplate == nil || existingTemplate.AccountID != authAccount.ID {
 			utils.SendError(w, http.StatusNotFound, "Template não encontrado")
 			return
 		}
 
 		// 🔄 Deletar template no banco
-		if err := h.repo.DeleteByID(templateID); err != nil {
+		if err := h.repo.DeleteByID(r.Context(), templateID); err != nil {
 			h.log.Error("Erro ao deletar template", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao deletar template")
 			return
@@ -257,7 +257,7 @@ func (h *templateHandle) UploadTemplateFileHandler() http.HandlerFunc {
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Buscar template no banco
-		existingTemplate, err := h.repo.GetByID(templateID)
+		existingTemplate, err := h.repo.GetByID(r.Context(), templateID)
 		if err != nil || existingTemplate == nil || existingTemplate.AccountID != authAccount.ID {
 			utils.SendError(w, http.StatusNotFound, "Template não encontrado")
 			return

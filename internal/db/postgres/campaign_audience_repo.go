@@ -3,8 +3,10 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -26,7 +28,7 @@ func NewCampaignAudienceRepository(db *sql.DB) db.CampaignAudienceRepository {
 }
 
 // Adiciona contatos à audiência da campanha
-func (r *campaignAudienceRepo) AddContactsToCampaign(campaignID uuid.UUID, contacts []models.CampaignAudience) ([]models.CampaignAudience, error) {
+func (r *campaignAudienceRepo) AddContactsToCampaign(ctx context.Context, campaignID uuid.UUID, contacts []models.CampaignAudience) ([]models.CampaignAudience, error) {
 	audiences := []models.CampaignAudience{}
 
 	tx, err := r.db.Begin()
@@ -35,10 +37,14 @@ func (r *campaignAudienceRepo) AddContactsToCampaign(campaignID uuid.UUID, conta
 	}
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO campaigns_audience (campaign_id, contact_id, type, status)
-		VALUES ($1, $2, $3, 'pendente') ON CONFLICT DO NOTHING RETURNING *
+		INSERT INTO campaigns_audience (campaign_id, contact_id, type, status, updated_at)
+		VALUES ($1, $2, $3, 'pendente', NOW())
+		ON CONFLICT (campaign_id, contact_id) DO UPDATE 
+		SET updated_at = NOW()
+		RETURNING id, campaign_id, contact_id, type, status, message_id, feedback_api, created_at, updated_at
 	`)
 	if err != nil {
+		tx.Rollback()
 		return nil, err
 	}
 	defer stmt.Close()
@@ -49,18 +55,21 @@ func (r *campaignAudienceRepo) AddContactsToCampaign(campaignID uuid.UUID, conta
 			&audience.ID, &audience.CampaignID, &audience.ContactID, &audience.Type, &audience.Status, &audience.MessageID, &audience.Feedback, &audience.CreatedAt, &audience.UpdatedAt,
 		)
 		if err != nil {
+			tx.Rollback()
 			return nil, err
 		}
 		audiences = append(audiences, audience)
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 
 	return audiences, nil
 }
 
 // GetCampaignAudience retorna a audiência de uma campanha junto com os detalhes dos contatos
-func (r *campaignAudienceRepo) GetCampaignAudience(campaignID uuid.UUID, contactType *string) ([]dto.CampaignMessageDTO, error) {
+func (r *campaignAudienceRepo) GetCampaignAudience(ctx context.Context, campaignID uuid.UUID, contactType *string) ([]dto.CampaignAudienceDTO, error) {
 	query := `
 		SELECT ca.id, ca.campaign_id, ca.contact_id, ca.type, ca.status,
 		       c.name, c.email, c.whatsapp, c.gender, c.birth_date, 
@@ -82,9 +91,9 @@ func (r *campaignAudienceRepo) GetCampaignAudience(campaignID uuid.UUID, contact
 	}
 	defer rows.Close()
 
-	var messages []dto.CampaignMessageDTO
+	var messages []dto.CampaignAudienceDTO
 	for rows.Next() {
-		var msg dto.CampaignMessageDTO
+		var msg dto.CampaignAudienceDTO
 		var tagsJSON []byte
 
 		if err := rows.Scan(
@@ -108,13 +117,13 @@ func (r *campaignAudienceRepo) GetCampaignAudience(campaignID uuid.UUID, contact
 }
 
 // Remove um contato da audiência
-func (r *campaignAudienceRepo) RemoveContactFromCampaign(campaignID, contactID uuid.UUID) error {
+func (r *campaignAudienceRepo) RemoveContactFromCampaign(ctx context.Context, campaignID, contactID uuid.UUID) error {
 	_, err := r.db.Exec(`DELETE FROM campaigns_audience WHERE campaign_id = $1 AND contact_id = $2`, campaignID, contactID)
 	return err
 }
 
 // Atualiza o status de um contato enviado
-func (r *campaignAudienceRepo) UpdateStatus(contactID uuid.UUID, status, messageID string, feedback map[string]interface{}) error {
+func (r *campaignAudienceRepo) UpdateStatus(ctx context.Context, contactID uuid.UUID, status, messageID string, feedback map[string]interface{}) error {
 	feedbackJSON, err := json.Marshal(feedback)
 	if err != nil {
 		return err
@@ -127,7 +136,7 @@ func (r *campaignAudienceRepo) UpdateStatus(contactID uuid.UUID, status, message
 }
 
 // UpdateStatusByMessageID atualiza o status de uma mensagem usando o message_id
-func (r *campaignAudienceRepo) UpdateStatusByMessageID(messageID string, status string, feedbackAPI *string) error {
+func (r *campaignAudienceRepo) UpdateStatusByMessageID(ctx context.Context, messageID string, status string, feedbackAPI *string) error {
 	query := `
 		UPDATE campaigns_audience 
 		SET status = $1, feedback_api = $2, updated_at = NOW()
@@ -141,4 +150,55 @@ func (r *campaignAudienceRepo) UpdateStatusByMessageID(messageID string, status 
 
 	r.log.Info("✅ Status atualizado com sucesso para message_id: %s -> %s", messageID, status)
 	return nil
+}
+
+// GetCampaignAudienceToSQS busca a audiência da campanha para envio à fila SQS.
+func (r *campaignAudienceRepo) GetCampaignAudienceToSQS(ctx context.Context, accountID uuid.UUID, campaignID uuid.UUID, contactType *string) ([]dto.CampaignMessageDTO, error) {
+	// Query base para buscar os contatos da campanha
+	query := `
+		SELECT
+			ca.id,
+			ca.campaign_id,
+			ca.contact_id,
+			ca.type
+		FROM
+			campaigns_audience ca
+		WHERE
+			ca.campaign_id = $1
+	`
+
+	args := []interface{}{campaignID} // ✅ Correção: Passa UUID diretamente
+
+	// Adiciona filtro opcional pelo tipo de contato (email ou WhatsApp)
+	if contactType != nil {
+		query += " AND ca.type = $2"
+		args = append(args, *contactType)
+	}
+
+	r.log.Debug("🔍 Buscando audiência da campanha", slog.String("query", query))
+	r.log.Debug("🔍 Buscando audiência da campanha", slog.String("args", fmt.Sprintf("%v", args)))
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []dto.CampaignMessageDTO
+	for rows.Next() {
+		msg := dto.CampaignMessageDTO{AccountID: accountID}
+		if err := rows.Scan(&msg.ID, &msg.CampaignID, &msg.ContactID, &msg.Type); err != nil {
+			return nil, err
+		}
+
+		messages = append(messages, msg)
+	}
+
+	r.log.Debug("✅ Audiência da campanha encontrada",
+		slog.String("account_id", accountID.String()),
+		slog.String("campaign_id", campaignID.String()),
+		slog.Int("total", len(messages)),
+	)
+
+	return messages, nil
 }

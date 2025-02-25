@@ -1,4 +1,4 @@
-// File: /internal/service/ai_prompt.go
+// File: /internal/service/contact_import_prompt.go
 
 package service
 
@@ -11,8 +11,8 @@ import (
 	"github.com/jeancarlosdanese/go-marketing/internal/dto"
 )
 
-// GeneratePromptForAI gera um prompt dinâmico baseado em um único registro do CSV e nas configurações definidas pelo usuário.
-func GeneratePromptForAI(record []string, headers []string, config *dto.ConfigImportContactDTO) string {
+// GenerateContactPromptForAI gera um prompt dinâmico baseado em um único registro do CSV e nas configurações definidas pelo usuário.
+func GenerateContactPromptForAI(record []string, headers []string, config *dto.ConfigImportContactDTO) string {
 	// 🔹 Criar um mapa associando cabeçalhos aos valores do CSV
 	dataMap := make(map[string]string)
 	for i, value := range record {

@@ -14,8 +14,14 @@ import (
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 )
 
-// SQSService gerencia a comunicação com o Amazon SQS
-type SQSService struct {
+// SQSService define as operações para interagir com o Amazon SQS
+type SQSService interface {
+	SendMessage(ctx context.Context, queueType string, message interface{}) error
+	ReceiveMessages(ctx context.Context, queueType string, handler func(dto.CampaignMessageDTO) error)
+}
+
+// sqsService gerencia a comunicação com o Amazon SQS
+type sqsService struct {
 	log              *slog.Logger
 	client           *sqs.Client
 	emailQueueURL    string
@@ -23,7 +29,7 @@ type SQSService struct {
 }
 
 // NewSQSService inicializa o serviço de filas SQS
-func NewSQSService(emailQueueURL, whatsappQueueURL string) (*SQSService, error) {
+func NewSQSService(emailQueueURL, whatsappQueueURL string) (*sqsService, error) {
 	log := logger.GetLogger()
 
 	cfg, err := config.LoadDefaultConfig(context.TODO())
@@ -34,7 +40,7 @@ func NewSQSService(emailQueueURL, whatsappQueueURL string) (*SQSService, error) 
 
 	client := sqs.NewFromConfig(cfg)
 
-	return &SQSService{
+	return &sqsService{
 		log:              log,
 		client:           client,
 		emailQueueURL:    emailQueueURL,
@@ -43,7 +49,7 @@ func NewSQSService(emailQueueURL, whatsappQueueURL string) (*SQSService, error) 
 }
 
 // SendMessage envia uma mensagem para a fila correta (email ou whatsapp)
-func (s *SQSService) SendMessage(queueType string, message interface{}) error {
+func (s *sqsService) SendMessage(ctx context.Context, queueType string, message interface{}) error {
 	var queueURL string
 
 	if queueType == "email" {
@@ -77,7 +83,7 @@ func (s *SQSService) SendMessage(queueType string, message interface{}) error {
 }
 
 // ReceiveMessages processa mensagens de uma fila específica e passa para um handler
-func (s *SQSService) ReceiveMessages(queueType string, handler func(dto.CampaignMessageDTO) error) {
+func (s *sqsService) ReceiveMessages(ctx context.Context, queueType string, handler func(dto.CampaignMessageDTO) error) {
 	var queueURL string
 
 	if queueType == "email" {

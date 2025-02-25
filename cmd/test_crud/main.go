@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -34,7 +35,7 @@ func main() {
 		Name:  "Teste User",
 		Email: "teste@example.com",
 	}
-	account, err := accountRepo.Create(newAccount)
+	account, err := accountRepo.Create(context.TODO(), newAccount)
 	if err != nil {
 		fmt.Println("❌ Erro ao criar conta:", err)
 	}
@@ -42,7 +43,7 @@ func main() {
 	fmt.Printf("✅ Conta criada com sucesso: %+v\n", account)
 
 	// Buscar conta pelo ID
-	foundAccount, err := accountRepo.GetByID(newAccount.ID)
+	foundAccount, err := accountRepo.GetByID(context.TODO(), newAccount.ID)
 	if err != nil {
 		fmt.Println("❌ Erro ao buscar conta:", err)
 	} else {

@@ -18,5 +18,5 @@ func RegisterSESFeedBackRoutes(mux *http.ServeMux, audienceRepo db.CampaignAudie
 	mux.Handle("POST /ses-feedback", handler.HandleSESFeedback())
 
 	// SNS confirmend subscription
-	mux.Handle("POST /sns-event", handler.HandleSNSEvent())
+	// mux.Handle("POST /ses-feedback", handler.HandleSNSEvent())
 }

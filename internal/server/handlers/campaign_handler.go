@@ -79,7 +79,7 @@ func (h *campaignHandle) CreateCampaignHandler() http.HandlerFunc {
 			Status:      "pendente",
 		}
 
-		createdCampaign, err := h.campaignRepo.Create(campaign)
+		createdCampaign, err := h.campaignRepo.Create(r.Context(), campaign)
 		if err != nil {
 			h.log.Error("Erro ao criar campanha", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao criar campanha")
@@ -108,7 +108,7 @@ func (h *campaignHandle) GetCampaignHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Buscar campanha no banco
-		campaign, err := h.campaignRepo.GetByID(campaignID)
+		campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
 		if err != nil {
 			h.log.Error("Erro ao buscar campanha", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar campanha")
@@ -139,7 +139,7 @@ func (h *campaignHandle) GetAllCampaignsHandler() http.HandlerFunc {
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// 🔍 Buscar todas as campanhas da conta autenticada
-		campaigns, err := h.campaignRepo.GetAllByAccountID(authAccount.ID)
+		campaigns, err := h.campaignRepo.GetAllByAccountID(r.Context(), authAccount.ID)
 		if err != nil {
 			h.log.Error("Erro ao buscar campanhas", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar campanhas")
@@ -184,7 +184,7 @@ func (h *campaignHandle) UpdateCampaignHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Buscar campanha
-		campaign, err := h.campaignRepo.GetByID(campaignID)
+		campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
 		if err != nil || campaign == nil {
 			utils.SendError(w, http.StatusNotFound, "Campanha não encontrada")
 			return
@@ -217,7 +217,7 @@ func (h *campaignHandle) UpdateCampaignHandler() http.HandlerFunc {
 		}
 
 		// Atualizar campanha no banco
-		updatedCampaign, err := h.campaignRepo.UpdateByID(campaignID, campaign)
+		updatedCampaign, err := h.campaignRepo.UpdateByID(r.Context(), campaignID, campaign)
 		if err != nil {
 			h.log.Error("Erro ao atualizar campanha", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar campanha")
@@ -263,7 +263,7 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Buscar campanha
-		campaign, err := h.campaignRepo.GetByID(campaignID)
+		campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
 		if err != nil || campaign == nil {
 			utils.SendError(w, http.StatusNotFound, "Campanha não encontrada")
 			return
@@ -277,7 +277,7 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 
 		// 🔍 Se for ativar a campanha, verificar se há contatos na audiência
 		if statusDTO.Status == "ativa" {
-			audience, err := h.audienceRepo.GetCampaignAudience(campaignID, nil)
+			audience, err := h.audienceRepo.GetCampaignAudienceToSQS(r.Context(), authAccount.ID, campaignID, nil)
 			if err != nil {
 				h.log.Error("Erro ao buscar audiência", "campaign_id", campaignID, "error", err)
 				utils.SendError(w, http.StatusInternalServerError, "Erro ao verificar audiência")
@@ -292,7 +292,7 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 			// 🚀 Inicia o worker em background para enviar mensagens
 			go func() {
 				h.log.Info("Iniciando worker de envio de mensagens", "campaign_id", campaignID)
-				if err := h.workerService.ProcessCampaign(campaign, audience); err != nil {
+				if err := h.workerService.ProcessCampaign(r.Context(), campaign, audience); err != nil {
 					h.log.Error("Erro no processamento da campanha", "campaign_id", campaignID, "error", err)
 				}
 			}()
@@ -300,7 +300,7 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 
 		// ✅ Atualizar status da campanha
 		campaign.Status = statusDTO.Status
-		if err := h.campaignRepo.UpdateStatus(campaignID, campaign.Status); err != nil {
+		if err := h.campaignRepo.UpdateStatus(r.Context(), campaignID, campaign.Status); err != nil {
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar status")
 			return
 		}
@@ -322,7 +322,7 @@ func (h *campaignHandle) DeleteCampaignHandler() http.HandlerFunc {
 		campaignID := r.PathValue("campaign_id")
 
 		// 🔍 Buscar campanha
-		campaign, err := h.campaignRepo.GetByID(uuid.MustParse(campaignID))
+		campaign, err := h.campaignRepo.GetByID(r.Context(), uuid.MustParse(campaignID))
 		if err != nil || campaign == nil {
 			utils.SendError(w, http.StatusNotFound, "Campanha não encontrada")
 			return
@@ -334,7 +334,7 @@ func (h *campaignHandle) DeleteCampaignHandler() http.HandlerFunc {
 			return
 		}
 
-		err = h.campaignRepo.DeleteByID(uuid.MustParse(campaignID))
+		err = h.campaignRepo.DeleteByID(r.Context(), uuid.MustParse(campaignID))
 		if err != nil {
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao deletar campanha")
 			return

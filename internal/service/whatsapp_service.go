@@ -83,15 +83,15 @@ func (w *WhatsAppService) SendWhatsApp(whatsappRequest models.WhatsAppRequest) e
 func (w *WhatsAppService) GenerateWhatsAppContent(msg dto.CampaignMessageDTO) (map[string]string, error) {
 	w.log.Info("Gerando conteúdo de WhatsApp", "contact_id", msg.ContactID)
 
-	// Personalizar nome do contato
-	name := msg.Name
-	if name == "" {
-		name = "Caro cliente"
-	}
+	// // Personalizar nome do contato
+	// name := msg.Name
+	// if name == "" {
+	// 	name = "Caro cliente"
+	// }
 
 	// Criar variáveis para o template do WhatsApp
 	variables := map[string]string{
-		"name":   name,
+		// "name":   name,
 		"offer":  "50% de desconto para você!", // Exemplo de variável
 		"action": "Clique aqui para saber mais",
 	}

@@ -3,6 +3,7 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -28,7 +29,7 @@ func NewContactRepository(db *sql.DB) *contactRepo {
 }
 
 // 📌 Criar contato no banco
-func (r *contactRepo) Create(contact *models.Contact) (*models.Contact, error) {
+func (r *contactRepo) Create(ctx context.Context, contact *models.Contact) (*models.Contact, error) {
 	r.log.Debug("Criando novo contato",
 		slog.String("account_id", contact.AccountID.String()),
 		slog.String("name", contact.Name),
@@ -69,7 +70,7 @@ func (r *contactRepo) Create(contact *models.Contact) (*models.Contact, error) {
 }
 
 // 📌 Buscar contato pelo ID
-func (r *contactRepo) GetByID(contactID uuid.UUID) (*models.Contact, error) {
+func (r *contactRepo) GetByID(ctx context.Context, contactID uuid.UUID) (*models.Contact, error) {
 	r.log.Debug("Buscando contato por ID",
 		slog.String("contact_id", contactID.String()))
 
@@ -110,7 +111,7 @@ func (r *contactRepo) GetByID(contactID uuid.UUID) (*models.Contact, error) {
 }
 
 // 📌 Buscar contatos por account_id
-func (r *contactRepo) GetByAccountID(accountID uuid.UUID, filters map[string]string) ([]models.Contact, error) {
+func (r *contactRepo) GetByAccountID(ctx context.Context, accountID uuid.UUID, filters map[string]string) ([]models.Contact, error) {
 	r.log.Debug("Buscando contatos por account_id",
 		slog.String("account_id", accountID.String()))
 
@@ -183,7 +184,7 @@ func (r *contactRepo) GetByAccountID(accountID uuid.UUID, filters map[string]str
 }
 
 // 📌 Buscar contato por e-mail ou WhatsApp dentro de uma conta específica
-func (r *contactRepo) FindByEmailOrWhatsApp(accountID uuid.UUID, email, whatsapp *string) (*models.Contact, error) {
+func (r *contactRepo) FindByEmailOrWhatsApp(ctx context.Context, accountID uuid.UUID, email, whatsapp *string) (*models.Contact, error) {
 	query := `
 		SELECT id, account_id, name, email, whatsapp FROM contacts
 		WHERE account_id = $1 AND (email = $2 OR whatsapp = $3)
@@ -214,7 +215,7 @@ func (r *contactRepo) FindByEmailOrWhatsApp(accountID uuid.UUID, email, whatsapp
 }
 
 // 📌 Atualizar contato pelo ID
-func (r *contactRepo) UpdateByID(contactID uuid.UUID, contact *models.Contact) (*models.Contact, error) {
+func (r *contactRepo) UpdateByID(ctx context.Context, contactID uuid.UUID, contact *models.Contact) (*models.Contact, error) {
 	r.log.Debug("Atualizando contato",
 		slog.String("contact_id", contactID.String()),
 		slog.String("account_id", contact.AccountID.String()))
@@ -249,7 +250,7 @@ func (r *contactRepo) UpdateByID(contactID uuid.UUID, contact *models.Contact) (
 }
 
 // 📌 Deletar contato pelo ID
-func (r *contactRepo) DeleteByID(contactID uuid.UUID) error {
+func (r *contactRepo) DeleteByID(ctx context.Context, contactID uuid.UUID) error {
 	r.log.Debug("Deletando contato",
 		slog.String("contact_id", contactID.String()))
 

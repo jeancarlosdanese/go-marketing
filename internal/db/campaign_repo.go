@@ -3,16 +3,18 @@
 package db
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
 )
 
 // CampaignRepository define as operações para manipular campanhas
 type CampaignRepository interface {
-	Create(campaign *models.Campaign) (*models.Campaign, error)
-	GetByID(campaignID uuid.UUID) (*models.Campaign, error)
-	GetAllByAccountID(accountID uuid.UUID) ([]models.Campaign, error)
-	UpdateByID(campaignID uuid.UUID, campaign *models.Campaign) (*models.Campaign, error)
-	UpdateStatus(campaignID uuid.UUID, status string) error
-	DeleteByID(campaignID uuid.UUID) error
+	Create(ctx context.Context, campaign *models.Campaign) (*models.Campaign, error)
+	GetByID(ctx context.Context, campaignID uuid.UUID) (*models.Campaign, error)
+	GetAllByAccountID(ctx context.Context, accountID uuid.UUID) ([]models.Campaign, error)
+	UpdateByID(ctx context.Context, campaignID uuid.UUID, campaign *models.Campaign) (*models.Campaign, error)
+	UpdateStatus(ctx context.Context, campaignID uuid.UUID, status string) error
+	DeleteByID(ctx context.Context, campaignID uuid.UUID) error
 }

@@ -21,15 +21,17 @@ type ImportHandler interface {
 }
 
 type importHandler struct {
-	log          *slog.Logger
-	contatctRepo db.ContactRepository
+	log                  *slog.Logger
+	contatctRepo         db.ContactRepository
+	contactImportService service.ContactImportService
 }
 
 // NewImportHandler cria uma instância do ImportHandler
-func NewImportHandler(contatctRepo db.ContactRepository) ImportHandler {
+func NewImportHandler(contatctRepo db.ContactRepository, openAIService service.OpenAIService) ImportHandler {
 	return &importHandler{
-		log:          logger.GetLogger(),
-		contatctRepo: contatctRepo,
+		log:                  logger.GetLogger(),
+		contatctRepo:         contatctRepo,
+		contactImportService: service.NewContactImportService(contatctRepo, openAIService),
 	}
 }
 
@@ -69,7 +71,7 @@ func (h *importHandler) UploadCSVHandler() http.HandlerFunc {
 		defer file.Close()
 
 		// 📌 Processar CSV e salvar no banco
-		successCount, failedCount, err := service.ProcessCSVAndSaveDB(file, h.contatctRepo, authAccount.ID, &config)
+		successCount, failedCount, err := h.contactImportService.ProcessCSVAndSaveDB(r.Context(), file, authAccount.ID, &config)
 		if err != nil {
 			h.log.Error("Erro ao processar CSV",
 				slog.String("account_id", authAccount.ID.String()),

@@ -3,30 +3,32 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
 )
 
-// campaignRepo implementa CampaignRepository para PostgreSQL
-type campaignRepo struct {
+// campaignRepository implementa CampaignRepository para PostgreSQL
+type campaignRepository struct {
 	log *slog.Logger
 	db  *sql.DB
 }
 
 // NewCampaignRepository cria um novo repositório para campanhas
-func NewCampaignRepository(db *sql.DB) *campaignRepo {
+func NewCampaignRepository(db *sql.DB) db.CampaignRepository {
 	log := logger.GetLogger()
-	return &campaignRepo{log: log, db: db}
+	return &campaignRepository{log: log, db: db}
 }
 
 // Create insere uma nova campanha no banco de dados
-func (r *campaignRepo) Create(campaign *models.Campaign) (*models.Campaign, error) {
+func (r *campaignRepository) Create(ctx context.Context, campaign *models.Campaign) (*models.Campaign, error) {
 	r.log.Debug("Criando nova campanha", "name", campaign.Name)
 
 	// Serializa Channels e Filters para JSONB
@@ -61,7 +63,7 @@ func (r *campaignRepo) Create(campaign *models.Campaign) (*models.Campaign, erro
 }
 
 // GetByID retorna uma campanha pelo ID
-func (r *campaignRepo) GetByID(campaignID uuid.UUID) (*models.Campaign, error) {
+func (r *campaignRepository) GetByID(ctx context.Context, campaignID uuid.UUID) (*models.Campaign, error) {
 	r.log.Debug("Buscando campanha por ID", "id", campaignID)
 
 	query := `
@@ -95,7 +97,7 @@ func (r *campaignRepo) GetByID(campaignID uuid.UUID) (*models.Campaign, error) {
 }
 
 // GetAllByAccountID retorna todas as campanhas de uma conta
-func (r *campaignRepo) GetAllByAccountID(accountID uuid.UUID) ([]models.Campaign, error) {
+func (r *campaignRepository) GetAllByAccountID(ctx context.Context, accountID uuid.UUID) ([]models.Campaign, error) {
 	r.log.Debug("Buscando todas as campanhas da conta", "account_id", accountID)
 
 	query := `
@@ -137,7 +139,7 @@ func (r *campaignRepo) GetAllByAccountID(accountID uuid.UUID) ([]models.Campaign
 }
 
 // UpdateByID atualiza os dados de uma campanha
-func (r *campaignRepo) UpdateByID(campaignID uuid.UUID, campaign *models.Campaign) (*models.Campaign, error) {
+func (r *campaignRepository) UpdateByID(ctx context.Context, campaignID uuid.UUID, campaign *models.Campaign) (*models.Campaign, error) {
 	r.log.Debug("Atualizando campanha", "id", campaignID)
 
 	channelsJSON, err := json.Marshal(campaign.Channels)
@@ -168,7 +170,7 @@ func (r *campaignRepo) UpdateByID(campaignID uuid.UUID, campaign *models.Campaig
 }
 
 // UpdateStatus atualiza apenas o status da campanha
-func (r *campaignRepo) UpdateStatus(campaignID uuid.UUID, status string) error {
+func (r *campaignRepository) UpdateStatus(ctx context.Context, campaignID uuid.UUID, status string) error {
 	r.log.Debug("Atualizando status da campanha", "id", campaignID, "status", status)
 
 	query := `UPDATE campaigns SET status = $1, updated_at = NOW()  WHERE id = $2`
@@ -182,7 +184,7 @@ func (r *campaignRepo) UpdateStatus(campaignID uuid.UUID, status string) error {
 }
 
 // DeleteByID remove uma campanha pelo ID
-func (r *campaignRepo) DeleteByID(campaignID uuid.UUID) error {
+func (r *campaignRepository) DeleteByID(ctx context.Context, campaignID uuid.UUID) error {
 	r.log.Debug("Deletando campanha", "id", campaignID)
 
 	query := `DELETE FROM campaigns WHERE id = $1`

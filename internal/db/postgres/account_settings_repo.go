@@ -3,11 +3,13 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
 )
 
@@ -17,12 +19,12 @@ type accountSettingsRepo struct {
 }
 
 // NewAccountSettingsRepository cria um novo repositório para configurações de conta.
-func NewAccountSettingsRepository(db *sql.DB) *accountSettingsRepo {
+func NewAccountSettingsRepository(db *sql.DB) db.AccountSettingsRepository {
 	return &accountSettingsRepo{db: db}
 }
 
 // Create insere novas configurações para uma conta.
-func (r *accountSettingsRepo) Create(settings *models.AccountSettings) (*models.AccountSettings, error) {
+func (r *accountSettingsRepo) Create(ctx context.Context, settings *models.AccountSettings) (*models.AccountSettings, error) {
 	query := `
 		INSERT INTO account_settings (
 			account_id, openai_api_key, evolution_instance, aws_access_key_id,
@@ -45,7 +47,7 @@ func (r *accountSettingsRepo) Create(settings *models.AccountSettings) (*models.
 }
 
 // GetByAccountID retorna as configurações de uma conta pelo ID da conta.
-func (r *accountSettingsRepo) GetByAccountID(accountID uuid.UUID) (*models.AccountSettings, error) {
+func (r *accountSettingsRepo) GetByAccountID(ctx context.Context, accountID uuid.UUID) (*models.AccountSettings, error) {
 	query := `
 		SELECT id, account_id, openai_api_key, evolution_instance, aws_access_key_id,
 		       aws_secret_access_key, aws_region, mail_from, mail_admin_to
@@ -69,7 +71,7 @@ func (r *accountSettingsRepo) GetByAccountID(accountID uuid.UUID) (*models.Accou
 }
 
 // UpdateByAccountID atualiza as configurações de uma conta pelo ID da conta.
-func (r *accountSettingsRepo) UpdateByAccountID(accountID uuid.UUID, settings *models.AccountSettings) (*models.AccountSettings, error) {
+func (r *accountSettingsRepo) UpdateByAccountID(ctx context.Context, accountID uuid.UUID, settings *models.AccountSettings) (*models.AccountSettings, error) {
 	query := `
 		UPDATE account_settings
 		SET openai_api_key = $1, evolution_instance = $2, aws_access_key_id = $3,
@@ -92,7 +94,7 @@ func (r *accountSettingsRepo) UpdateByAccountID(accountID uuid.UUID, settings *m
 }
 
 // DeleteByAccountID remove as configurações de uma conta pelo ID da conta.
-func (r *accountSettingsRepo) DeleteByAccountID(accountID uuid.UUID) error {
+func (r *accountSettingsRepo) DeleteByAccountID(ctx context.Context, accountID uuid.UUID) error {
 	query := `DELETE FROM account_settings WHERE account_id = $1`
 	_, err := r.db.Exec(query, accountID)
 	if err != nil {

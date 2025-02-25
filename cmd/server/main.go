@@ -42,10 +42,13 @@ func main() {
 	templateRepo := postgres.NewTemplateRepository(dbConn)
 	campaignRepo := postgres.NewCampaignRepository(dbConn)
 	audienceRepo := postgres.NewCampaignAudienceRepository(dbConn)
+	campaignSettingsRepo := postgres.NewCampaignSettingsRepository(dbConn)
 
 	// 🔧 Inicializar serviços
 	// Criar os serviços diretamente com os valores do ambiente
 	sqsService, _ := service.NewSQSService(os.Getenv("SQS_EMAIL_URL"), os.Getenv("SQS_WHATSAPP_URL"))
+
+	openAIService := service.NewOpenAIService()
 
 	emailService := service.NewEmailService(accountSettingsRepo)
 
@@ -56,14 +59,35 @@ func main() {
 	)
 
 	// 🚀 Iniciar os Workers
-	workerService := service.NewWorkerService(sqsService, emailService, whatsappService, audienceRepo)
-	workerService.Start()
+	workerService := service.NewWorkerService(
+		sqsService,
+		emailService,
+		whatsappService,
+		audienceRepo,
+		contactRepo,
+		campaignRepo,
+		accountRepo,
+		accountSettingsRepo,
+		campaignSettingsRepo,
+		openAIService,
+	)
+	workerService.Start(context.TODO())
 
 	// Criar o servidor HTTP
 	port := os.Getenv("APP_PORT")
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", port),
-		Handler: routes.NewRouter(otpRepo, accountRepo, accountSettingsRepo, contactRepo, templateRepo, campaignRepo, audienceRepo, *workerService),
+		Addr: fmt.Sprintf(":%s", port),
+		Handler: routes.NewRouter(
+			otpRepo, accountRepo,
+			accountSettingsRepo,
+			contactRepo,
+			templateRepo,
+			campaignRepo,
+			audienceRepo,
+			campaignSettingsRepo,
+			openAIService,
+			workerService,
+		),
 	}
 
 	// Canal para capturar sinais do sistema

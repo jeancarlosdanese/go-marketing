@@ -65,7 +65,7 @@ func (h *accountHandle) CreateAccountHandler() http.HandlerFunc {
 			WhatsApp: accountDTO.WhatsApp,
 		}
 
-		createdAccount, err := h.repo.Create(account)
+		createdAccount, err := h.repo.Create(r.Context(), account)
 		if err != nil {
 			h.log.Error("Erro ao criar conta", "error", err)
 			if strings.Contains(err.Error(), "duplicate key value") {
@@ -100,7 +100,7 @@ func (h *accountHandle) GetAllAccountsHandler() http.HandlerFunc {
 			return
 		}
 
-		accounts, err := h.repo.GetAll()
+		accounts, err := h.repo.GetAll(r.Context())
 		if err != nil {
 			h.log.Error("Erro ao buscar contas", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar contas")
@@ -143,7 +143,7 @@ func (h *accountHandle) GetAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		account, err := h.repo.GetByID(id)
+		account, err := h.repo.GetByID(r.Context(), id)
 		if err != nil {
 			h.log.Warn("Conta não encontrada", "account_id", id.String())
 			utils.SendError(w, http.StatusNotFound, "Conta não encontrada")
@@ -195,7 +195,7 @@ func (h *accountHandle) UpdateAccountHandler() http.HandlerFunc {
 		}
 
 		updateData, _ := json.Marshal(updateDTO)
-		updatedAccount, err := h.repo.UpdateByID(id, updateData)
+		updatedAccount, err := h.repo.UpdateByID(r.Context(), id, updateData)
 		if err != nil {
 			h.log.Error("Erro ao atualizar conta", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar conta")
@@ -232,7 +232,7 @@ func (h *accountHandle) DeleteAccountHandler() http.HandlerFunc {
 			return
 		}
 
-		err = h.repo.DeleteByID(id)
+		err = h.repo.DeleteByID(r.Context(), id)
 		if err != nil {
 			h.log.Error("Erro ao deletar conta", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao deletar conta")

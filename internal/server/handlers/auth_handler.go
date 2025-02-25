@@ -33,7 +33,7 @@ func (h *authHandle) RequestAuthHandle() http.HandlerFunc {
 			return
 		}
 
-		account, err := h.repo.FindByEmailOrWhatsApp(req.Identifier)
+		account, err := h.repo.FindByEmailOrWhatsApp(r.Context(), req.Identifier)
 		if err != nil {
 			http.Error(w, "Usuário não encontrado", http.StatusNotFound)
 			return
@@ -41,7 +41,7 @@ func (h *authHandle) RequestAuthHandle() http.HandlerFunc {
 
 		// Gerar e enviar OTP...
 		otp, _ := auth.GenerateOTP()
-		h.repo.StoreOTP(account.ID.String(), otp)
+		h.repo.StoreOTP(r.Context(), account.ID.String(), otp)
 		auth.SendOTP(req.Identifier, otp)
 
 		w.WriteHeader(http.StatusOK)
@@ -61,10 +61,10 @@ func (h *authHandle) VerifyAuthHandle() http.HandlerFunc {
 		}
 
 		// 🔥 Limpar OTPs expirados antes de verificar
-		h.repo.CleanExpiredOTPs()
+		h.repo.CleanExpiredOTPs(r.Context())
 
 		// 🔥 Buscar OTP válido
-		accountID, err := h.repo.FindValidOTP(req.Identifier, req.OTP)
+		accountID, err := h.repo.FindValidOTP(r.Context(), req.Identifier, req.OTP)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return

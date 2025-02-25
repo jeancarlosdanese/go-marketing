@@ -70,7 +70,7 @@ func (h *campaignAudienceHandle) AddContactsToCampaignHandler() http.HandlerFunc
 		// 🔍 Buscar contatos e garantir que pertencem ao usuário autenticado
 		var validContacts []models.Contact
 		for _, contactID := range requestDTO.ContactIDs {
-			contact, err := h.contactRepo.GetByID(contactID)
+			contact, err := h.contactRepo.GetByID(r.Context(), contactID)
 			if err != nil || contact == nil {
 				h.log.Warn("Contato não encontrado", "contact_id", contactID)
 				continue
@@ -115,7 +115,7 @@ func (h *campaignAudienceHandle) AddContactsToCampaignHandler() http.HandlerFunc
 		}
 
 		// 📦 Salvar registros
-		audiencesSaved, err := h.audienceRepo.AddContactsToCampaign(campaignID, audiences)
+		audiencesSaved, err := h.audienceRepo.AddContactsToCampaign(r.Context(), campaignID, audiences)
 		if err != nil {
 			h.log.Error("Erro ao adicionar contatos à campanha", "campaign_id", campaignID, "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao adicionar contatos à campanha")
@@ -135,7 +135,7 @@ func (h *campaignAudienceHandle) GetCampaignAudienceHandler() http.HandlerFunc {
 
 		// 🔍 Buscar contatos da audiência da campanha
 		var audienceType *string
-		audience, err := h.audienceRepo.GetCampaignAudience(campaignID, audienceType)
+		audience, err := h.audienceRepo.GetCampaignAudience(r.Context(), campaignID, audienceType)
 		if err != nil {
 			h.log.Error("Erro ao buscar audiência da campanha", "campaign_id", campaignID, "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar audiência da campanha")
@@ -161,7 +161,7 @@ func (h *campaignAudienceHandle) getCampaignIDFromRequest(r *http.Request, w htt
 	}
 
 	// 🔍 Buscar a campanha para garantir que pertence à conta autenticada
-	campaign, err := h.campaignRepo.GetByID(campaignID)
+	campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
 	if err != nil || campaign == nil {
 		h.log.Warn("Campanha não encontrada", "campaign_id", campaignID)
 		utils.SendError(w, http.StatusNotFound, "Campanha não encontrada")

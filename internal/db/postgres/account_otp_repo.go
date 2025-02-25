@@ -3,6 +3,7 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"time"
@@ -21,7 +22,7 @@ func NewAccountOTPRepository(db *sql.DB) db.AccountOTPRepository {
 }
 
 // FindValidOTP busca um OTP válido para o identificador (e-mail ou WhatsApp)
-func (r *AccountOTPRepoPostgres) FindValidOTP(identifier string, otp string) (*uuid.UUID, error) {
+func (r *AccountOTPRepoPostgres) FindValidOTP(ctx context.Context, identifier string, otp string) (*uuid.UUID, error) {
 	var accountID uuid.UUID
 	var expiresAt time.Time
 
@@ -48,13 +49,13 @@ func (r *AccountOTPRepoPostgres) FindValidOTP(identifier string, otp string) (*u
 }
 
 // CleanExpiredOTPs remove registros de OTPs expirados
-func (r *AccountOTPRepoPostgres) CleanExpiredOTPs() error {
+func (r *AccountOTPRepoPostgres) CleanExpiredOTPs(ctx context.Context) error {
 	_, err := r.db.Exec("DELETE FROM account_otps WHERE expires_at < now()")
 	return err
 }
 
 // FindByEmailOrWhatsApp busca uma conta pelo e-mail ou WhatsApp
-func (r *AccountOTPRepoPostgres) FindByEmailOrWhatsApp(identifier string) (*models.Account, error) {
+func (r *AccountOTPRepoPostgres) FindByEmailOrWhatsApp(ctx context.Context, identifier string) (*models.Account, error) {
 	query := "SELECT id, name, email, whatsapp FROM accounts WHERE email = $1 OR whatsapp = $1"
 	row := r.db.QueryRow(query, identifier)
 
@@ -69,7 +70,7 @@ func (r *AccountOTPRepoPostgres) FindByEmailOrWhatsApp(identifier string) (*mode
 	return account, nil
 }
 
-func (r *AccountOTPRepoPostgres) StoreOTP(accountID string, otp string) error {
+func (r *AccountOTPRepoPostgres) StoreOTP(ctx context.Context, accountID string, otp string) error {
 	// 🔥 Garantir que a expiração está no formato UTC
 	expiration := time.Now().UTC().Add(10 * time.Minute)
 

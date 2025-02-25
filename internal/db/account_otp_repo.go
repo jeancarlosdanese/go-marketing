@@ -3,13 +3,15 @@
 package db
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
 )
 
 type AccountOTPRepository interface {
-	FindValidOTP(identifier string, otp string) (*uuid.UUID, error)
-	CleanExpiredOTPs() error
-	FindByEmailOrWhatsApp(identifier string) (*models.Account, error)
-	StoreOTP(accountID string, otp string) error
+	FindValidOTP(ctx context.Context, identifier string, otp string) (*uuid.UUID, error)
+	CleanExpiredOTPs(ctx context.Context) error
+	FindByEmailOrWhatsApp(ctx context.Context, identifier string) (*models.Account, error)
+	StoreOTP(ctx context.Context, accountID string, otp string) error
 }

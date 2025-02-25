@@ -92,7 +92,7 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 		}
 
 		// 📌 Criar contato no banco de dados
-		createdContact, err := h.repo.Create(contact)
+		createdContact, err := h.repo.Create(r.Context(), contact)
 		if err != nil {
 			if utils.IsUniqueConstraintError(err) { // Capturar erro de chave única
 				h.log.Warn("Tentativa de criar contato já existente",
@@ -127,7 +127,7 @@ func (h *contactHandle) GetAllContactsHandler() http.HandlerFunc {
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		filters := utils.ExtractQueryFilters(r.URL.Query(), []string{"name", "email", "whatsapp", "cidade", "estado", "bairro", "tags", "interesses", "perfil", "eventos"})
-		contacts, err := h.repo.GetByAccountID(authAccount.ID, filters)
+		contacts, err := h.repo.GetByAccountID(r.Context(), authAccount.ID, filters)
 		if err != nil {
 			h.log.Error("Erro ao buscar contatos", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar contatos")
@@ -156,7 +156,7 @@ func (h *contactHandle) GetContactHandler() http.HandlerFunc {
 			return
 		}
 
-		contact, err := h.repo.GetByID(contactID)
+		contact, err := h.repo.GetByID(r.Context(), contactID)
 		if err != nil || contact == nil {
 			h.log.Warn("Contato não encontrado", "contact_id", contactID)
 			utils.SendError(w, http.StatusNotFound, "Contato não encontrado")
@@ -199,7 +199,7 @@ func (h *contactHandle) UpdateContactHandler() http.HandlerFunc {
 		}
 
 		// 📌 Buscar contato no banco
-		contact, err := h.repo.GetByID(contactID)
+		contact, err := h.repo.GetByID(r.Context(), contactID)
 		if err != nil || contact == nil {
 			h.log.Warn("Contato não encontrado", "contact_id", contactID)
 			utils.SendError(w, http.StatusNotFound, "Contato não encontrado")
@@ -253,7 +253,7 @@ func (h *contactHandle) UpdateContactHandler() http.HandlerFunc {
 		}
 
 		// 📌 Salvar atualização
-		updatedContact, err := h.repo.UpdateByID(contactID, contact)
+		updatedContact, err := h.repo.UpdateByID(r.Context(), contactID, contact)
 		if err != nil {
 			h.log.Error("Erro ao atualizar contato", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar contato")
@@ -278,7 +278,7 @@ func (h *contactHandle) DeleteContactHandler() http.HandlerFunc {
 			return
 		}
 
-		contact, err := h.repo.GetByID(contactID)
+		contact, err := h.repo.GetByID(r.Context(), contactID)
 		if err != nil || contact == nil {
 			h.log.Warn("Contato não encontrado", "contact_id", contactID)
 			utils.SendError(w, http.StatusNotFound, "Contato não encontrado")
@@ -291,7 +291,7 @@ func (h *contactHandle) DeleteContactHandler() http.HandlerFunc {
 			return
 		}
 
-		if err := h.repo.DeleteByID(contactID); err != nil {
+		if err := h.repo.DeleteByID(r.Context(), contactID); err != nil {
 			h.log.Error("Erro ao deletar contato", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao deletar contato")
 			return

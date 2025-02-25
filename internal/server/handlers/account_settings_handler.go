@@ -74,7 +74,7 @@ func (h *accountSettingsHandle) CreateAccountSettingsHandler() http.HandlerFunc 
 			MailAdminTo:        settingsDTO.MailAdminTo,
 		}
 
-		createdSettings, err := h.repo.Create(settings)
+		createdSettings, err := h.repo.Create(r.Context(), settings)
 		if err != nil {
 			h.log.Error("Erro ao criar configurações da conta", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao criar configurações")
@@ -119,7 +119,7 @@ func (h *accountSettingsHandle) GetAccountSettingsHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Buscar configurações da conta
-		settings, err := h.repo.GetByAccountID(accountID)
+		settings, err := h.repo.GetByAccountID(r.Context(), accountID)
 		if err != nil {
 			h.log.Error("Erro ao buscar configurações da conta", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar configurações")
@@ -170,7 +170,7 @@ func (h *accountSettingsHandle) UpdateAccountSettingsHandler() http.HandlerFunc 
 		}
 
 		// 🔍 Buscar configurações da conta
-		existingSettings, err := h.repo.GetByAccountID(accountID)
+		existingSettings, err := h.repo.GetByAccountID(r.Context(), accountID)
 		if err != nil {
 			h.log.Error("Erro ao buscar configurações da conta", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar configurações")
@@ -213,7 +213,7 @@ func (h *accountSettingsHandle) UpdateAccountSettingsHandler() http.HandlerFunc 
 		}
 
 		// 🔄 Atualizar configurações no banco
-		updatedSettings, err := h.repo.UpdateByAccountID(accountID, existingSettings)
+		updatedSettings, err := h.repo.UpdateByAccountID(r.Context(), accountID, existingSettings)
 		if err != nil {
 			h.log.Error("Erro ao atualizar configurações da conta", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar configurações")
@@ -258,7 +258,7 @@ func (h *accountSettingsHandle) DeleteAccountSettingsHandler() http.HandlerFunc 
 		}
 
 		// ❌ Deletar configurações
-		err = h.repo.DeleteByAccountID(accountID)
+		err = h.repo.DeleteByAccountID(r.Context(), accountID)
 		if err != nil {
 			h.log.Error("Erro ao deletar configurações da conta", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao deletar configurações")

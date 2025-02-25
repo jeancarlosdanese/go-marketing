@@ -42,7 +42,7 @@ func AuthMiddleware(accountRepo db.AccountRepository) func(http.Handler) http.Ha
 				return
 			}
 
-			account, err := accountRepo.GetByID(uuidAccountID)
+			account, err := accountRepo.GetByID(context.Background(), uuidAccountID)
 			if err != nil {
 				http.Error(w, "Conta não encontrada", http.StatusUnauthorized)
 				return

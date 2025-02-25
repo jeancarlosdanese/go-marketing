@@ -19,6 +19,8 @@ func NewRouter(
 	templateRepo db.TemplateRepository,
 	campaignRepo db.CampaignRepository,
 	audienceRepo db.CampaignAudienceRepository,
+	campaignSettingsRepo db.CampaignSettingsRepository,
+	openAIService service.OpenAIService,
 	workerService service.WorkerService,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
@@ -30,11 +32,12 @@ func NewRouter(
 	RegisterAuthRoutes(mux, otpRepo)
 	RegisterAccountRoutes(mux, authMiddleware, accountRepo)
 	RegisterAccountSettingsRoutes(mux, authMiddleware, accountSettingsRepo)
-	RegisterContactRoutes(mux, authMiddleware, contactRepo)
+	RegisterContactRoutes(mux, authMiddleware, contactRepo, openAIService)
 	RegisterTemplateRoutes(mux, authMiddleware, templateRepo)
 	RegisterCampaignRoutes(mux, authMiddleware, campaignRepo, audienceRepo, workerService)
 	RegisterCampaignAudienceRoutes(mux, authMiddleware, campaignRepo, contactRepo, audienceRepo)
 	RegisterSESFeedBackRoutes(mux, audienceRepo)
+	RegisterCampaignSettingsRoutes(mux, authMiddleware, campaignSettingsRepo)
 
 	// 🔥 Rota de Health Check
 	mux.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

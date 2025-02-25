@@ -3,6 +3,7 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -26,7 +27,7 @@ func NewTemplateRepository(db *sql.DB) *templateRepo {
 }
 
 // Create insere um novo template no banco de dados.
-func (r *templateRepo) Create(template *models.Template) (*models.Template, error) {
+func (r *templateRepo) Create(ctx context.Context, template *models.Template) (*models.Template, error) {
 	r.log.Debug("Criando novo template", "name", template.Name)
 	query := `
 		INSERT INTO templates (
@@ -49,7 +50,7 @@ func (r *templateRepo) Create(template *models.Template) (*models.Template, erro
 }
 
 // GetByID retorna um template pelo ID.
-func (r *templateRepo) GetByID(templateID uuid.UUID) (*models.Template, error) {
+func (r *templateRepo) GetByID(ctx context.Context, templateID uuid.UUID) (*models.Template, error) {
 	r.log.Debug("Buscando template por ID", "id", templateID)
 
 	query := `
@@ -73,7 +74,7 @@ func (r *templateRepo) GetByID(templateID uuid.UUID) (*models.Template, error) {
 }
 
 // GetByAccountID retorna todos os templates de uma conta específica.
-func (r *templateRepo) GetByAccountID(accountID uuid.UUID) ([]models.Template, error) {
+func (r *templateRepo) GetByAccountID(ctx context.Context, accountID uuid.UUID) ([]models.Template, error) {
 	r.log.Debug("Buscando templates por account_id", "account_id", accountID)
 
 	query := `
@@ -103,7 +104,7 @@ func (r *templateRepo) GetByAccountID(accountID uuid.UUID) ([]models.Template, e
 }
 
 // UpdateByID atualiza um template pelo ID.
-func (r *templateRepo) UpdateByID(templateID uuid.UUID, template *models.Template) (*models.Template, error) {
+func (r *templateRepo) UpdateByID(ctx context.Context, templateID uuid.UUID, template *models.Template) (*models.Template, error) {
 	r.log.Debug("Atualizando template por ID", "id", templateID)
 
 	query := `
@@ -127,7 +128,7 @@ func (r *templateRepo) UpdateByID(templateID uuid.UUID, template *models.Templat
 }
 
 // DeleteByID remove um template pelo ID.
-func (r *templateRepo) DeleteByID(templateID uuid.UUID) error {
+func (r *templateRepo) DeleteByID(ctx context.Context, templateID uuid.UUID) error {
 	r.log.Debug("Deletando template por ID", "id", templateID)
 
 	query := `DELETE FROM templates WHERE id = $1`
