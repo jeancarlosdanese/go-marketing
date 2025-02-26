@@ -16,10 +16,10 @@ func RegisterCampaignRoutes(
 	authMiddleware func(http.Handler) http.HandlerFunc,
 	campaignRepo db.CampaignRepository,
 	audienceRepo db.CampaignAudienceRepository,
-	workerService service.WorkerService,
+	campaignProcessor service.CampaignProcessorService,
 ) {
 
-	handler := handlers.NewCampaignHandle(campaignRepo, audienceRepo, workerService)
+	handler := handlers.NewCampaignHandle(campaignRepo, audienceRepo, campaignProcessor)
 
 	// Criar campanha
 	mux.Handle("POST /campaigns", authMiddleware(handler.CreateCampaignHandler()))

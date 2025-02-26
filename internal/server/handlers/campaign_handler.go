@@ -26,22 +26,22 @@ type CampaignHandle interface {
 }
 
 type campaignHandle struct {
-	log           *slog.Logger
-	campaignRepo  db.CampaignRepository
-	audienceRepo  db.CampaignAudienceRepository
-	workerService service.WorkerService
+	log               *slog.Logger
+	campaignRepo      db.CampaignRepository
+	audienceRepo      db.CampaignAudienceRepository
+	campaignProcessor service.CampaignProcessorService
 }
 
 func NewCampaignHandle(
 	campaignRepo db.CampaignRepository,
 	audienceRepo db.CampaignAudienceRepository,
-	workerService service.WorkerService,
+	campaignProcessor service.CampaignProcessorService,
 ) CampaignHandle {
 	return &campaignHandle{
-		log:           logger.GetLogger(),
-		campaignRepo:  campaignRepo,
-		audienceRepo:  audienceRepo,
-		workerService: workerService,
+		log:               logger.GetLogger(),
+		campaignRepo:      campaignRepo,
+		audienceRepo:      audienceRepo,
+		campaignProcessor: campaignProcessor,
 	}
 }
 
@@ -275,7 +275,7 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 			// 🚀 Inicia o worker em background para enviar mensagens
 			go func() {
 				h.log.Info("Iniciando worker de envio de mensagens", "campaign_id", campaignID)
-				if err := h.workerService.ProcessCampaign(r.Context(), campaign, audience); err != nil {
+				if err := h.campaignProcessor.ProcessCampaign(r.Context(), campaign, audience); err != nil {
 					h.log.Error("Erro no processamento da campanha", "campaign_id", campaignID, "error", err)
 				}
 			}()

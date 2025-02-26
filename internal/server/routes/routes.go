@@ -21,7 +21,7 @@ func NewRouter(
 	audienceRepo db.CampaignAudienceRepository,
 	campaignSettingsRepo db.CampaignSettingsRepository,
 	openAIService service.OpenAIService,
-	workerService service.WorkerService,
+	campaignProcessor service.CampaignProcessorService,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -34,7 +34,7 @@ func NewRouter(
 	RegisterAccountSettingsRoutes(mux, authMiddleware, accountSettingsRepo)
 	RegisterContactRoutes(mux, authMiddleware, contactRepo, openAIService)
 	RegisterTemplateRoutes(mux, authMiddleware, templateRepo)
-	RegisterCampaignRoutes(mux, authMiddleware, campaignRepo, audienceRepo, workerService)
+	RegisterCampaignRoutes(mux, authMiddleware, campaignRepo, audienceRepo, campaignProcessor)
 	RegisterCampaignAudienceRoutes(mux, authMiddleware, campaignRepo, contactRepo, audienceRepo)
 	RegisterSESFeedBackRoutes(mux, audienceRepo)
 	RegisterCampaignSettingsRoutes(mux, authMiddleware, campaignSettingsRepo)

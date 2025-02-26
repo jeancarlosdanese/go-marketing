@@ -13,8 +13,13 @@ import (
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
 )
 
-// WhatsAppService gerencia o envio de mensagens via Evolution API
-type WhatsAppService struct {
+type WhatsAppService interface {
+	SendWhatsApp(whatsappRequest models.WhatsAppRequest) error
+	GenerateWhatsAppContent(msg dto.CampaignMessageDTO) (map[string]string, error)
+}
+
+// whatsAppService gerencia o envio de mensagens via Evolution API
+type whatsAppService struct {
 	log        *slog.Logger
 	apiURL     string
 	apiKey     string
@@ -22,8 +27,8 @@ type WhatsAppService struct {
 }
 
 // NewWhatsAppService inicializa o serviço de WhatsApp
-func NewWhatsAppService(apiURL, apiKey, instanceID string) *WhatsAppService {
-	return &WhatsAppService{
+func NewWhatsAppService(apiURL, apiKey, instanceID string) WhatsAppService {
+	return &whatsAppService{
 		log:        slog.Default(),
 		apiURL:     apiURL,
 		apiKey:     apiKey,
@@ -32,7 +37,7 @@ func NewWhatsAppService(apiURL, apiKey, instanceID string) *WhatsAppService {
 }
 
 // SendWhatsApp envia uma mensagem via Evolution API
-func (w *WhatsAppService) SendWhatsApp(whatsappRequest models.WhatsAppRequest) error {
+func (w *whatsAppService) SendWhatsApp(whatsappRequest models.WhatsAppRequest) error {
 	w.log.Info("📨 Enviando mensagem de WhatsApp via Evolution API", "to", whatsappRequest.To)
 
 	// Criar payload JSON
@@ -80,7 +85,7 @@ func (w *WhatsAppService) SendWhatsApp(whatsappRequest models.WhatsAppRequest) e
 }
 
 // GenerateWhatsAppContent cria variáveis para a mensagem do WhatsApp
-func (w *WhatsAppService) GenerateWhatsAppContent(msg dto.CampaignMessageDTO) (map[string]string, error) {
+func (w *whatsAppService) GenerateWhatsAppContent(msg dto.CampaignMessageDTO) (map[string]string, error) {
 	w.log.Info("Gerando conteúdo de WhatsApp", "contact_id", msg.ContactID)
 
 	// // Personalizar nome do contato

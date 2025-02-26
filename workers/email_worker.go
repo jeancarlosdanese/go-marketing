@@ -1,0 +1,132 @@
+// File: /internal/workers/email_worker.go
+
+package workers
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+
+	"github.com/jeancarlosdanese/go-marketing/internal/db"
+	"github.com/jeancarlosdanese/go-marketing/internal/dto"
+	"github.com/jeancarlosdanese/go-marketing/internal/logger"
+	"github.com/jeancarlosdanese/go-marketing/internal/service"
+)
+
+// EmailWorker define as operações para processar as filas de e-mails
+type EmailWorker interface {
+	Start(ctx context.Context)
+}
+
+// emailWorker processa mensagens de e-mail do SQS
+type emailWorker struct {
+	log                  *slog.Logger
+	sqsService           service.SQSService
+	emailService         service.EmailService
+	audienceRepo         db.CampaignAudienceRepository
+	contactRepo          db.ContactRepository
+	campaignRepo         db.CampaignRepository
+	accountRepo          db.AccountRepository
+	accountSettingsRepo  db.AccountSettingsRepository
+	campaignSettingsRepo db.CampaignSettingsRepository
+	openAIClient         service.OpenAIService
+}
+
+// NewEmailWorker cria um novo Worker de E-mails
+func NewEmailWorker(
+	sqsService service.SQSService,
+	emailService service.EmailService,
+	audienceRepo db.CampaignAudienceRepository,
+	contactRepo db.ContactRepository,
+	campaignRepo db.CampaignRepository,
+	accountRepo db.AccountRepository,
+	accountSettingsRepo db.AccountSettingsRepository,
+	campaignSettingsRepo db.CampaignSettingsRepository,
+	openAIClient service.OpenAIService,
+) EmailWorker {
+	return &emailWorker{
+		log:                  logger.GetLogger(),
+		sqsService:           sqsService,
+		emailService:         emailService,
+		audienceRepo:         audienceRepo,
+		contactRepo:          contactRepo,
+		campaignRepo:         campaignRepo,
+		accountRepo:          accountRepo,
+		accountSettingsRepo:  accountSettingsRepo,
+		campaignSettingsRepo: campaignSettingsRepo,
+		openAIClient:         openAIClient,
+	}
+}
+
+// Start inicia o consumo da fila de e-mails
+func (w *emailWorker) Start(ctx context.Context) {
+	w.log.Info("📨 EmailWorker iniciado 🚀")
+	w.sqsService.ReceiveMessages(ctx, "email", func(msg dto.CampaignMessageDTO) error {
+		return w.processEmailMessage(ctx, msg)
+	})
+}
+
+// processEmailMessage processa mensagens da fila de e-mail
+func (w *emailWorker) processEmailMessage(ctx context.Context, campaignMessage dto.CampaignMessageDTO) error {
+	w.log.Info("📦 Processando campaignMessage", "campaign_id", campaignMessage.CampaignID, "contact_id", campaignMessage.ContactID)
+
+	// 🔍 Buscar conta
+	account, err := w.accountRepo.GetByID(ctx, campaignMessage.AccountID)
+	if err != nil {
+		w.log.Error("❌ Erro ao buscar conta", "account_id", campaignMessage.AccountID, "error", err)
+		return err
+	}
+
+	// 🔍 Buscar configurações da conta
+	accountSettings, err := w.accountSettingsRepo.GetByAccountID(ctx, campaignMessage.AccountID)
+	if err != nil {
+		w.log.Error("❌ Erro ao buscar configurações da conta", "account_id", campaignMessage.AccountID, "error", err)
+	}
+
+	// 🔍 Buscar configurações da campanha
+	campaign, err := w.campaignRepo.GetByID(ctx, campaignMessage.CampaignID)
+	if err != nil {
+		w.log.Error("❌ Erro ao buscar campanha", "campaign_id", campaignMessage.CampaignID, "error", err)
+		return err
+	}
+
+	// 🔍 Buscar configurações da campanha
+	campaignSettings, err := w.campaignSettingsRepo.GetSettingsByCampaignID(ctx, campaignMessage.CampaignID)
+	if err != nil {
+		w.log.Error("❌ Erro ao buscar configurações da campanha", "campaign_id", campaignMessage.CampaignID, "error", err)
+		return err
+	}
+
+	// 🔍 Buscar detalhes do contato no banco
+	contact, err := w.contactRepo.GetByID(ctx, campaignMessage.ContactID)
+	if err != nil {
+		w.log.Error("❌ Erro ao buscar contato", "contact_id", campaignMessage.ContactID, "error", err)
+		return err
+	}
+
+	emailData, err := w.emailService.CreateEmailWithAI(ctx, *contact, *campaign, *campaignSettings)
+	if err != nil {
+		w.log.Error("❌ Erro ao criar e-mail com AI", "contact_id", campaignMessage.ContactID, "error", err)
+	}
+
+	// 🔍 Validar se o contato possui e-mail
+	if contact.Email == nil {
+		w.log.Error("❌ Contato não possui e-mail válido", "contact_id", campaignMessage.ContactID)
+		return fmt.Errorf("contato %s não possui e-mail válido", campaignMessage.ContactID)
+	}
+
+	w.log.Info("📨 Preparando e-mail para envio", "to", contact.Email)
+
+	// 🚀 Enviar e-mail
+	sesEmailOutput, err := w.emailService.SendEmail(*account, *accountSettings, *campaign, *campaignSettings, *contact, *emailData)
+	if err != nil {
+		w.log.Error("Erro ao enviar email", "error", err)
+		return err
+	}
+
+	// // ✅ Atualizar status para "enviado"
+	w.audienceRepo.UpdateStatus(ctx, contact.ID, "enviado", *sesEmailOutput.MessageId, nil)
+
+	w.log.Info("✅ E-mail enviado com sucesso!", "to", sesEmailOutput.MessageId)
+	return nil
+}

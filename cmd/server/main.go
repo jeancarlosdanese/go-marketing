@@ -17,6 +17,7 @@ import (
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/server/routes"
 	"github.com/jeancarlosdanese/go-marketing/internal/service"
+	"github.com/jeancarlosdanese/go-marketing/workers"
 )
 
 func main() {
@@ -47,11 +48,9 @@ func main() {
 	// 🔧 Inicializar serviços
 	// Criar os serviços diretamente com os valores do ambiente
 	sqsService, _ := service.NewSQSService(os.Getenv("SQS_EMAIL_URL"), os.Getenv("SQS_WHATSAPP_URL"))
-
 	openAIService := service.NewOpenAIService()
-
-	emailService := service.NewEmailService(accountSettingsRepo)
-
+	campaignProcessor := service.NewCampaignProcessorService(sqsService, audienceRepo)
+	emailService := service.NewEmailService(openAIService)
 	whatsappService := service.NewWhatsAppService(
 		os.Getenv("EVOLUTION_API_URL"),
 		os.Getenv("EVOLUTION_API_KEY"),
@@ -59,9 +58,21 @@ func main() {
 	)
 
 	// 🚀 Iniciar os Workers
-	workerService := service.NewWorkerService(
+	emailWorker := workers.NewEmailWorker(
 		sqsService,
 		emailService,
+		audienceRepo,
+		contactRepo,
+		campaignRepo,
+		accountRepo,
+		accountSettingsRepo,
+		campaignSettingsRepo,
+		openAIService,
+	)
+	emailWorker.Start(context.TODO())
+
+	whatsappWorker := workers.NewWhatsAppWorker(
+		sqsService,
 		whatsappService,
 		audienceRepo,
 		contactRepo,
@@ -71,7 +82,7 @@ func main() {
 		campaignSettingsRepo,
 		openAIService,
 	)
-	workerService.Start(context.TODO())
+	whatsappWorker.Start(context.TODO())
 
 	// Criar o servidor HTTP
 	port := os.Getenv("APP_PORT")
@@ -86,7 +97,7 @@ func main() {
 			audienceRepo,
 			campaignSettingsRepo,
 			openAIService,
-			workerService,
+			campaignProcessor,
 		),
 	}
 
