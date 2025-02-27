@@ -93,7 +93,7 @@ func (h *campaignAudienceHandle) AddContactsToCampaignHandler() http.HandlerFunc
 
 		// 🔄 Adicionar contatos para todos os tipos de canais
 		if requestDTO.Type == nil {
-			for _, channelType := range models.CampaignChannelsTypes {
+			for _, channelType := range models.AllowedChannels {
 				for _, contact := range validContacts {
 					// 🛑 Ignorar contatos sem o canal especificado
 					if channelType == models.WhatsappChannel && contact.WhatsApp == nil || channelType == models.EmailChannel && contact.Email == nil {

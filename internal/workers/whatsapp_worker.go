@@ -59,10 +59,21 @@ func NewWhatsAppWorker(
 
 // Start inicia o consumo da fila de WhatsApp
 func (w *whatsAppWorker) Start(ctx context.Context) {
-	w.log.Info("WhatsAppWorker iniciado 🚀")
-	w.sqsService.ReceiveMessages(ctx, "whatsapp", func(msg dto.CampaignMessageDTO) error {
-		return w.processWhatsAppMessage(ctx, msg)
-	})
+	w.log.Info("📨 WhatsAppWorker iniciado 🚀")
+	go func() {
+		err := w.sqsService.ReceiveMessages(ctx, "whatsapp", func(msg dto.CampaignMessageDTO) error {
+			go func() { // Processa cada mensagem em uma goroutine separada
+				err := w.processWhatsAppMessage(ctx, msg)
+				if err != nil {
+					w.log.Error("❌ Erro ao processar mensagem do WhatsApp", "error", err)
+				}
+			}()
+			return nil
+		})
+		if err != nil {
+			w.log.Error("❌ Erro ao iniciar processamento de mensagens", "error", err)
+		}
+	}()
 }
 
 // processWhatsAppMessage processa mensagens do WhatsApp

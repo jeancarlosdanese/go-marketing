@@ -61,9 +61,20 @@ func NewEmailWorker(
 // Start inicia o consumo da fila de e-mails
 func (w *emailWorker) Start(ctx context.Context) {
 	w.log.Info("📨 EmailWorker iniciado 🚀")
-	w.sqsService.ReceiveMessages(ctx, "email", func(msg dto.CampaignMessageDTO) error {
-		return w.processEmailMessage(ctx, msg)
-	})
+	go func() {
+		err := w.sqsService.ReceiveMessages(ctx, "email", func(msg dto.CampaignMessageDTO) error {
+			go func() {
+				err := w.processEmailMessage(ctx, msg)
+				if err != nil {
+					w.log.Error("❌ Erro ao processar mensagem", "error", err)
+				}
+			}()
+			return nil
+		})
+		if err != nil {
+			w.log.Error("❌ Erro ao iniciar processamento de mensagens", "error", err)
+		}
+	}()
 }
 
 // processEmailMessage processa mensagens da fila de e-mail

@@ -29,7 +29,7 @@ func NewRouter(
 	authMiddleware := middleware.AuthMiddleware(accountRepo)
 
 	// 🔥 Registrar rotas principais
-	RegisterAuthRoutes(mux, otpRepo)
+	RegisterAuthRoutes(mux, authMiddleware, otpRepo)
 	RegisterAccountRoutes(mux, authMiddleware, accountRepo)
 	RegisterAccountSettingsRoutes(mux, authMiddleware, accountSettingsRepo)
 	RegisterContactRoutes(mux, authMiddleware, contactRepo, openAIService)

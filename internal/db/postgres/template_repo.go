@@ -10,24 +10,25 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
 )
 
-// templateRepo implementa TemplateRepository para PostgreSQL.
-type templateRepo struct {
+// templateRepository implementa TemplateRepositorysitory para PostgreSQL.
+type templateRepository struct {
 	log *slog.Logger
 	db  *sql.DB
 }
 
 // NewTemplateRepository cria um novo repositório para templates.
-func NewTemplateRepository(db *sql.DB) *templateRepo {
+func NewTemplateRepository(db *sql.DB) db.TemplateRepository {
 	log := logger.GetLogger()
-	return &templateRepo{log: log, db: db}
+	return &templateRepository{log: log, db: db}
 }
 
 // Create insere um novo template no banco de dados.
-func (r *templateRepo) Create(ctx context.Context, template *models.Template) (*models.Template, error) {
+func (r *templateRepository) Create(ctx context.Context, template *models.Template) (*models.Template, error) {
 	r.log.Debug("Criando novo template", "name", template.Name)
 	query := `
 		INSERT INTO templates (
@@ -50,7 +51,7 @@ func (r *templateRepo) Create(ctx context.Context, template *models.Template) (*
 }
 
 // GetByID retorna um template pelo ID.
-func (r *templateRepo) GetByID(ctx context.Context, templateID uuid.UUID) (*models.Template, error) {
+func (r *templateRepository) GetByID(ctx context.Context, templateID uuid.UUID) (*models.Template, error) {
 	r.log.Debug("Buscando template por ID", "id", templateID)
 
 	query := `
@@ -74,14 +75,36 @@ func (r *templateRepo) GetByID(ctx context.Context, templateID uuid.UUID) (*mode
 }
 
 // GetByAccountID retorna todos os templates de uma conta específica.
-func (r *templateRepo) GetByAccountID(ctx context.Context, accountID uuid.UUID) ([]models.Template, error) {
-	r.log.Debug("Buscando templates por account_id", "account_id", accountID)
+func (r *templateRepository) GetByAccountID(ctx context.Context, accountID uuid.UUID, filters map[string]string) ([]models.Template, error) {
+	r.log.Debug("Buscando templates por account_id", "account_id", accountID, "filters", filters)
 
-	query := `
-		SELECT id, account_id, name, description, created_at, updated_at
-		FROM templates WHERE account_id = $1
+	baseQuery := `
+		SELECT id, account_id, name, description, channel, created_at, updated_at
+		FROM templates
+		WHERE account_id = $1
 	`
-	rows, err := r.db.Query(query, accountID)
+	args := []interface{}{accountID}
+	filterIndex := 2
+
+	// 🔍 Aplicando filtros dinâmicos
+	for key, value := range filters {
+		switch key {
+		case "name":
+			baseQuery += fmt.Sprintf(" AND name ILIKE $%d", filterIndex)
+			args = append(args, "%"+value+"%")
+		case "description":
+			baseQuery += fmt.Sprintf(" AND description ILIKE $%d", filterIndex)
+			args = append(args, "%"+value+"%")
+		case "channel":
+			baseQuery += fmt.Sprintf(" AND channel = $%d", filterIndex)
+			args = append(args, value)
+		}
+		filterIndex++
+	}
+
+	baseQuery += " ORDER BY created_at DESC"
+
+	rows, err := r.db.Query(baseQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao buscar templates: %w", err)
 	}
@@ -91,7 +114,7 @@ func (r *templateRepo) GetByAccountID(ctx context.Context, accountID uuid.UUID) 
 	for rows.Next() {
 		var template models.Template
 		if err := rows.Scan(
-			&template.ID, &template.AccountID, &template.Name, &template.Description, &template.CreatedAt, &template.UpdatedAt,
+			&template.ID, &template.AccountID, &template.Name, &template.Description, &template.Channel, &template.CreatedAt, &template.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("erro ao escanear templates: %w", err)
 		}
@@ -104,7 +127,7 @@ func (r *templateRepo) GetByAccountID(ctx context.Context, accountID uuid.UUID) 
 }
 
 // UpdateByID atualiza um template pelo ID.
-func (r *templateRepo) UpdateByID(ctx context.Context, templateID uuid.UUID, template *models.Template) (*models.Template, error) {
+func (r *templateRepository) UpdateByID(ctx context.Context, templateID uuid.UUID, template *models.Template) (*models.Template, error) {
 	r.log.Debug("Atualizando template por ID", "id", templateID)
 
 	query := `
@@ -128,7 +151,7 @@ func (r *templateRepo) UpdateByID(ctx context.Context, templateID uuid.UUID, tem
 }
 
 // DeleteByID remove um template pelo ID.
-func (r *templateRepo) DeleteByID(ctx context.Context, templateID uuid.UUID) error {
+func (r *templateRepository) DeleteByID(ctx context.Context, templateID uuid.UUID) error {
 	r.log.Debug("Deletando template por ID", "id", templateID)
 
 	query := `DELETE FROM templates WHERE id = $1`

@@ -3,10 +3,13 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/dto"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
@@ -48,6 +51,10 @@ func NewCampaignHandle(
 // CreateCampaignHandler cria uma nova campanha
 func (h *campaignHandle) CreateCampaignHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		bodyBytes, _ := io.ReadAll(r.Body)
+		h.log.Debug("Criando nova campanha", "body", string(bodyBytes))
+		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
 		var campaignDTO dto.CampaignCreateDTO
 
 		// Decodifica JSON
@@ -57,6 +64,13 @@ func (h *campaignHandle) CreateCampaignHandler() http.HandlerFunc {
 			return
 		}
 		defer r.Body.Close()
+
+		for channel, config := range campaignDTO.Channels {
+			if config.TemplateID == uuid.Nil {
+				h.log.Warn("Removendo template vazio", "channel", channel)
+				delete(campaignDTO.Channels, channel)
+			}
+		}
 
 		// 🔍 Buscar conta autenticada
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
@@ -75,7 +89,7 @@ func (h *campaignHandle) CreateCampaignHandler() http.HandlerFunc {
 			Description: campaignDTO.Description,
 			Channels:    campaignDTO.Channels,
 			Filters:     campaignDTO.Filters,
-			Status:      "pendente",
+			Status:      models.StatusPendente,
 		}
 
 		createdCampaign, err := h.campaignRepo.Create(r.Context(), campaign)
@@ -131,8 +145,23 @@ func (h *campaignHandle) GetAllCampaignsHandler() http.HandlerFunc {
 		// 🔍 Buscar conta autenticada
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
-		// 🔍 Buscar todas as campanhas da conta autenticada
-		campaigns, err := h.campaignRepo.GetAllByAccountID(r.Context(), authAccount.ID)
+		// 🔍 Capturar filtros da URL (ex.: `?status=active&name=promo`)
+		filters := map[string]string{}
+		if status := r.URL.Query().Get("status"); status != "" {
+			filters["status"] = status
+		}
+		if name := r.URL.Query().Get("name"); name != "" {
+			filters["name"] = name
+		}
+		if createdAfter := r.URL.Query().Get("created_after"); createdAfter != "" {
+			filters["created_after"] = createdAfter
+		}
+		if createdBefore := r.URL.Query().Get("created_before"); createdBefore != "" {
+			filters["created_before"] = createdBefore
+		}
+
+		// 🔍 Buscar campanhas com os filtros aplicados
+		campaigns, err := h.campaignRepo.GetAllByAccountID(r.Context(), authAccount.ID, filters)
 		if err != nil {
 			h.log.Error("Erro ao buscar campanhas", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar campanhas")
@@ -145,7 +174,7 @@ func (h *campaignHandle) GetAllCampaignsHandler() http.HandlerFunc {
 			response = append(response, dto.NewCampaignResponseDTO(&campaign))
 		}
 
-		h.log.Info("Campanhas recuperadas com sucesso", "total", len(response))
+		h.log.Info("Campanhas recuperadas com sucesso", "total", len(response), "filters", filters)
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(response)
 	}
@@ -184,19 +213,58 @@ func (h *campaignHandle) UpdateCampaignHandler() http.HandlerFunc {
 			return
 		}
 
+		// Remover filtros vazios antes de atualizar
+		if updateDTO.Filters != nil {
+			// 🔥 Remover `gender` se estiver vazio
+			if updateDTO.Filters.Gender != nil && *updateDTO.Filters.Gender == "" {
+				h.log.Warn("Removendo filtro vazio", "campo", "gender")
+				updateDTO.Filters.Gender = nil
+			}
+
+			// 🔥 Verificar se `birth_date_range` está vazio
+			if updateDTO.Filters.BirthDateRange != nil {
+				// 🔥 Verificar se `start` e `end` estão vazios
+				if updateDTO.Filters.BirthDateRange.Start == nil || *updateDTO.Filters.BirthDateRange.Start == "" {
+					h.log.Warn("Removendo filtro vazio", "campo", "birth_date_range.start")
+					updateDTO.Filters.BirthDateRange.Start = nil // 🔥 Resetar para um struct vazio
+				}
+				// 🔥 Verificar se `end` está vazio
+				if updateDTO.Filters.BirthDateRange.End == nil || *updateDTO.Filters.BirthDateRange.End == "" {
+					h.log.Warn("Removendo filtro vazio", "campo", "birth_date_range.end")
+					updateDTO.Filters.BirthDateRange.End = nil // 🔥 Resetar para um struct vazio
+				}
+				// 🔥 Remover `birth_date_range` se ambos estiverem vazios
+				if updateDTO.Filters.BirthDateRange.Start == nil && updateDTO.Filters.BirthDateRange.End == nil {
+					h.log.Warn("Removendo filtro vazio", "campo", "birth_date_range")
+					updateDTO.Filters.BirthDateRange = nil // 🔥 Resetar para um struct vazio
+				}
+			}
+
+			// 🔥 Remover `tags` se estiver vazio
+			if updateDTO.Filters.Tags != nil && (len(updateDTO.Filters.Tags) == 0 || (updateDTO.Filters.Tags[0] != nil && *updateDTO.Filters.Tags[0] == "")) {
+				h.log.Warn("Removendo filtro vazio", "campo", "tags")
+				updateDTO.Filters.Tags = nil
+			}
+
+			// Remove filtros vazios
+			if updateDTO.Filters.Tags == nil && updateDTO.Filters.BirthDateRange == nil && updateDTO.Filters.Gender == nil {
+				h.log.Warn("Removendo filtros vazios", "campo", "filters")
+				updateDTO.Filters = nil
+			}
+		}
+
+		// Atualizar filtros
+		campaign.Filters = updateDTO.Filters
+
 		// Atualizar campanha
 		if updateDTO.Name != nil {
 			campaign.Name = *updateDTO.Name
 		}
-		if updateDTO.Description != nil {
-			campaign.Description = updateDTO.Description
-		}
+		campaign.Description = updateDTO.Description
 		if updateDTO.Channels != nil {
 			campaign.Channels = *updateDTO.Channels
 		}
-		if updateDTO.Filters != nil {
-			campaign.Filters = *updateDTO.Filters
-		}
+		campaign.Status = *updateDTO.Status
 
 		// Validar updateDTO
 		if err := updateDTO.Validate(); err != nil {
@@ -283,7 +351,7 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 
 		// ✅ Atualizar status da campanha
 		campaign.Status = statusDTO.Status
-		if err := h.campaignRepo.UpdateStatus(r.Context(), campaignID, campaign.Status); err != nil {
+		if err := h.campaignRepo.UpdateStatus(r.Context(), campaignID, string(campaign.Status)); err != nil {
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar status")
 			return
 		}
@@ -309,6 +377,13 @@ func (h *campaignHandle) DeleteCampaignHandler() http.HandlerFunc {
 		campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
 		if err != nil || campaign == nil {
 			utils.SendError(w, http.StatusNotFound, "Campanha não encontrada")
+			return
+		}
+
+		// 🚨 Verificar se a campanha não está ativa ou concluída
+		if campaign.Status != models.StatusPendente {
+			h.log.Warn("Tentativa de exclusão de campanha não pendente", "campaign_id", campaignID, "status", campaign.Status)
+			utils.SendError(w, http.StatusForbidden, "Apenas campanhas pendentes podem ser excluídas")
 			return
 		}
 

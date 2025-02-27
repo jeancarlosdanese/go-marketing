@@ -13,7 +13,7 @@ import (
 type TemplateRepository interface {
 	Create(ctx context.Context, template *models.Template) (*models.Template, error)
 	GetByID(ctx context.Context, templateID uuid.UUID) (*models.Template, error)
-	GetByAccountID(ctx context.Context, accountID uuid.UUID) ([]models.Template, error)
+	GetByAccountID(ctx context.Context, accountID uuid.UUID, filters map[string]string) ([]models.Template, error)
 	UpdateByID(ctx context.Context, templateID uuid.UUID, template *models.Template) (*models.Template, error)
 	DeleteByID(ctx context.Context, templateID uuid.UUID) error
 }

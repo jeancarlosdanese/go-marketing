@@ -16,8 +16,8 @@ import (
 
 // SQSService define as operações para interagir com o Amazon SQS
 type SQSService interface {
-	SendMessage(ctx context.Context, queueType string, message interface{}) error
-	ReceiveMessages(ctx context.Context, queueType string, handler func(dto.CampaignMessageDTO) error)
+	SendMessage(ctx context.Context, queueName string, message interface{}) error
+	ReceiveMessages(ctx context.Context, queueName string, handler func(msg dto.CampaignMessageDTO) error) error
 }
 
 // sqsService gerencia a comunicação com o Amazon SQS
@@ -49,15 +49,15 @@ func NewSQSService(emailQueueURL, whatsappQueueURL string) (*sqsService, error) 
 }
 
 // SendMessage envia uma mensagem para a fila correta (email ou whatsapp)
-func (s *sqsService) SendMessage(ctx context.Context, queueType string, message interface{}) error {
+func (s *sqsService) SendMessage(ctx context.Context, queueName string, message interface{}) error {
 	var queueURL string
 
-	if queueType == "email" {
+	if queueName == "email" {
 		queueURL = s.emailQueueURL
-	} else if queueType == "whatsapp" {
+	} else if queueName == "whatsapp" {
 		queueURL = s.whatsappQueueURL
 	} else {
-		s.log.Warn("Tipo de fila inválido", "queueType", queueType)
+		s.log.Warn("Tipo de fila inválido", "queueName", queueName)
 		return nil
 	}
 
@@ -74,25 +74,25 @@ func (s *sqsService) SendMessage(ctx context.Context, queueType string, message 
 		MessageBody: aws.String(string(messageBody)), // <---- Mantém JSON puro
 	})
 	if err != nil {
-		s.log.Error("Erro ao enviar mensagem para SQS", "queue", queueType, "error", err)
+		s.log.Error("Erro ao enviar mensagem para SQS", "queue", queueName, "error", err)
 		return err
 	}
 
-	s.log.Info("Mensagem enviada para SQS com sucesso", "queue", queueType)
+	s.log.Info("Mensagem enviada para SQS com sucesso", "queue", queueName)
 	return nil
 }
 
 // ReceiveMessages processa mensagens de uma fila específica e passa para um handler
-func (s *sqsService) ReceiveMessages(ctx context.Context, queueType string, handler func(dto.CampaignMessageDTO) error) {
+func (s *sqsService) ReceiveMessages(ctx context.Context, queueName string, handler func(msg dto.CampaignMessageDTO) error) error {
 	var queueURL string
 
-	if queueType == "email" {
+	if queueName == "email" {
 		queueURL = s.emailQueueURL
-	} else if queueType == "whatsapp" {
+	} else if queueName == "whatsapp" {
 		queueURL = s.whatsappQueueURL
 	} else {
-		s.log.Warn("Tipo de fila inválido", "queueType", queueType)
-		return
+		s.log.Warn("Tipo de fila inválido", "queueName", queueName)
+		return nil
 	}
 
 	for {
@@ -102,12 +102,12 @@ func (s *sqsService) ReceiveMessages(ctx context.Context, queueType string, hand
 			WaitTimeSeconds:     10,
 		})
 		if err != nil {
-			s.log.Error("Erro ao receber mensagens do SQS", "queue", queueType, "error", err)
+			s.log.Error("Erro ao receber mensagens do SQS", "queue", queueName, "error", err)
 			continue
 		}
 
 		for _, message := range msgResult.Messages {
-			s.log.Info("📩 Mensagem recebida do SQS", "queue", queueType, "message_id", *message.MessageId)
+			s.log.Info("📩 Mensagem recebida do SQS", "queue", queueName, "message_id", *message.MessageId)
 
 			// 🔍 Remover aspas extras caso existam
 			var rawMessage *string
@@ -124,7 +124,7 @@ func (s *sqsService) ReceiveMessages(ctx context.Context, queueType string, hand
 				continue
 			}
 
-			s.log.Info("📦 Mensagem decodificada com sucesso", "queue", queueType, "contact_id", campaignMessage.ContactID)
+			s.log.Info("📦 Mensagem decodificada com sucesso", "queue", queueName, "contact_id", campaignMessage.ContactID)
 			// 🚀 Chama a função de processamento do worker
 			if err := handler(campaignMessage); err != nil {
 				s.log.Error("Erro ao processar mensagem", "error", err)
@@ -137,7 +137,7 @@ func (s *sqsService) ReceiveMessages(ctx context.Context, queueType string, hand
 				ReceiptHandle: message.ReceiptHandle,
 			})
 			if err != nil {
-				s.log.Error("Erro ao deletar mensagem do SQS", "queue", queueType, "error", err)
+				s.log.Error("Erro ao deletar mensagem do SQS", "queue", queueName, "error", err)
 			}
 		}
 	}

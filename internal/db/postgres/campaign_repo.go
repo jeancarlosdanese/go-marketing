@@ -36,6 +36,7 @@ func (r *campaignRepository) Create(ctx context.Context, campaign *models.Campai
 	if err != nil {
 		return nil, fmt.Errorf("erro ao serializar channels: %w", err)
 	}
+
 	filtersJSON, err := json.Marshal(campaign.Filters)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao serializar filters: %w", err)
@@ -43,14 +44,13 @@ func (r *campaignRepository) Create(ctx context.Context, campaign *models.Campai
 
 	query := `
 		INSERT INTO campaigns (
-			id, account_id, name, description, channels, filters, status, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+			account_id, name, description, channels, filters, status, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
 		RETURNING id, created_at, updated_at
 	`
-	campaign.ID = uuid.New()
 
 	err = r.db.QueryRow(
-		query, campaign.ID, campaign.AccountID, campaign.Name, campaign.Description,
+		query, campaign.AccountID, campaign.Name, campaign.Description,
 		channelsJSON, filtersJSON, campaign.Status,
 	).Scan(&campaign.ID, &campaign.CreatedAt, &campaign.UpdatedAt)
 
@@ -97,14 +97,39 @@ func (r *campaignRepository) GetByID(ctx context.Context, campaignID uuid.UUID) 
 }
 
 // GetAllByAccountID retorna todas as campanhas de uma conta
-func (r *campaignRepository) GetAllByAccountID(ctx context.Context, accountID uuid.UUID) ([]models.Campaign, error) {
-	r.log.Debug("Buscando todas as campanhas da conta", "account_id", accountID)
+func (r *campaignRepository) GetAllByAccountID(ctx context.Context, accountID uuid.UUID, filters map[string]string) ([]models.Campaign, error) {
+	r.log.Debug("Buscando campanhas da conta", "account_id", accountID)
 
-	query := `
+	baseQuery := `
 		SELECT id, account_id, name, description, channels, filters, status, created_at, updated_at
-		FROM campaigns WHERE account_id = $1
+		FROM campaigns
+		WHERE account_id = $1
 	`
-	rows, err := r.db.Query(query, accountID)
+	args := []interface{}{accountID}
+	filterIndex := 2
+
+	// 🔍 Aplicação dinâmica de filtros
+	for key, value := range filters {
+		switch key {
+		case "name":
+			baseQuery += fmt.Sprintf(" AND name ILIKE $%d", filterIndex)
+			args = append(args, "%"+value+"%")
+		case "status":
+			baseQuery += fmt.Sprintf(" AND status = $%d", filterIndex)
+			args = append(args, value)
+		case "created_after":
+			baseQuery += fmt.Sprintf(" AND created_at >= $%d", filterIndex)
+			args = append(args, value)
+		case "created_before":
+			baseQuery += fmt.Sprintf(" AND created_at <= $%d", filterIndex)
+			args = append(args, value)
+		}
+		filterIndex++
+	}
+
+	baseQuery += " ORDER BY created_at DESC"
+
+	rows, err := r.db.Query(baseQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao buscar campanhas: %w", err)
 	}
@@ -122,13 +147,9 @@ func (r *campaignRepository) GetAllByAccountID(ctx context.Context, accountID uu
 			return nil, fmt.Errorf("erro ao escanear campanhas: %w", err)
 		}
 
-		// Desserializa JSONB
-		if err := json.Unmarshal(channelsJSON, &campaign.Channels); err != nil {
-			r.log.Warn("Erro ao desserializar channels", "error", err)
-		}
-		if err := json.Unmarshal(filtersJSON, &campaign.Filters); err != nil {
-			r.log.Warn("Erro ao desserializar filters", "error", err)
-		}
+		// Desserializar JSONB
+		_ = json.Unmarshal(channelsJSON, &campaign.Channels)
+		_ = json.Unmarshal(filtersJSON, &campaign.Filters)
 
 		campaigns = append(campaigns, campaign)
 	}

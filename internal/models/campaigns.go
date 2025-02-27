@@ -10,26 +10,16 @@ import (
 
 // Campaign representa uma campanha de marketing
 type Campaign struct {
-	ID          uuid.UUID       `json:"id"`
-	AccountID   uuid.UUID       `json:"account_id"`
-	Name        string          `json:"name"`
-	Description *string         `json:"description,omitempty"`
-	Channels    ChannelsConfig  `json:"channels"` // JSONB
-	Filters     AudienceFilters `json:"filters"`  // JSONB
-	Status      string          `json:"status"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	ID          uuid.UUID        `json:"id"`
+	AccountID   uuid.UUID        `json:"account_id"`
+	Name        string           `json:"name"`
+	Description *string          `json:"description,omitempty"`
+	Channels    ChannelsConfig   `json:"channels"`
+	Filters     *AudienceFilters `json:"filters,omitempty"`
+	Status      CampaignStatus   `json:"status"` // Usa o enum CampaignStatus
+	CreatedAt   time.Time        `json:"created_at"`
+	UpdatedAt   time.Time        `json:"updated_at"`
 }
-
-var ChannelType string
-
-const (
-	EmailChannel    = "email"
-	WhatsappChannel = "whatsapp"
-)
-
-// Define the CampaignChannelsTypes
-var CampaignChannelsTypes = []string{EmailChannel, WhatsappChannel}
 
 // ChannelsConfig define a estrutura dos canais e templates usados (email, whatsapp, etc.)
 type ChannelsConfig map[string]ChannelConfig
@@ -40,12 +30,14 @@ type ChannelConfig struct {
 	Priority   int       `json:"priority"`
 }
 
+type DateRange struct {
+	Start *string `json:"start,omitempty"`
+	End   *string `json:"end,omitempty"`
+}
+
 // AudienceFilters define os critérios do público-alvo para a campanha
 type AudienceFilters struct {
-	Tags           []string `json:"tags,omitempty"`
-	Gender         *string  `json:"gender,omitempty"`
-	BirthDateRange struct {
-		Start string `json:"start,omitempty"`
-		End   string `json:"end,omitempty"`
-	} `json:"birth_date_range,omitempty"`
+	Tags           []*string  `json:"tags,omitempty"`
+	Gender         *string    `json:"gender,omitempty"`
+	BirthDateRange *DateRange `json:"birth_date_range,omitempty"`
 }

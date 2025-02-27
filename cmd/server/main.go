@@ -15,25 +15,35 @@ import (
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/db/postgres"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
+	"github.com/jeancarlosdanese/go-marketing/internal/middleware"
 	"github.com/jeancarlosdanese/go-marketing/internal/server/routes"
 	"github.com/jeancarlosdanese/go-marketing/internal/service"
-	"github.com/jeancarlosdanese/go-marketing/workers"
+	"github.com/jeancarlosdanese/go-marketing/internal/workers"
 )
+
+// Função para iniciar workers de e-mail e WhatsApp
+func startWorker(ctx context.Context, worker workers.Worker, name string) {
+	log := logger.GetLogger()
+	go func() {
+		log.Info(fmt.Sprintf("🚀 Iniciando %s...", name))
+		worker.Start(ctx)
+	}()
+}
 
 func main() {
 	// Carregar configurações do .env
 	config.LoadConfig()
 
-	// Agora sim podemos inicializar o logger
+	// Inicializar logger
 	logger.InitLogger()
 	log := logger.GetLogger()
 
-	// 🔥 Agora o banco é escolhido com base no .env (`DB_DRIVER=postgres`)
+	// Conectar ao banco de dados
 	dbConn, err := db.GetDatabase()
 	if err != nil {
 		logger.Fatal("Erro ao conectar ao banco de dados", err)
 	}
-	defer dbConn.Close() // 🔌 Fecha a conexão corretamente ao encerrar a aplicação
+	defer dbConn.Close() // Fecha a conexão ao encerrar
 
 	// Criar repositórios
 	otpRepo := postgres.NewAccountOTPRepository(dbConn)
@@ -45,8 +55,7 @@ func main() {
 	audienceRepo := postgres.NewCampaignAudienceRepository(dbConn)
 	campaignSettingsRepo := postgres.NewCampaignSettingsRepository(dbConn)
 
-	// 🔧 Inicializar serviços
-	// Criar os serviços diretamente com os valores do ambiente
+	// Inicializar serviços
 	sqsService, _ := service.NewSQSService(os.Getenv("SQS_EMAIL_URL"), os.Getenv("SQS_WHATSAPP_URL"))
 	openAIService := service.NewOpenAIService()
 	campaignProcessor := service.NewCampaignProcessorService(sqsService, audienceRepo)
@@ -57,57 +66,48 @@ func main() {
 		os.Getenv("EVOLUTION_INSTANCE"),
 	)
 
-	// 🚀 Iniciar os Workers
+	// Criar contexto de controle para os workers
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Iniciar Workers de forma otimizada
 	emailWorker := workers.NewEmailWorker(
-		sqsService,
-		emailService,
-		audienceRepo,
-		contactRepo,
-		campaignRepo,
-		accountRepo,
-		accountSettingsRepo,
-		campaignSettingsRepo,
-		openAIService,
+		sqsService, emailService, audienceRepo, contactRepo, campaignRepo,
+		accountRepo, accountSettingsRepo, campaignSettingsRepo, openAIService,
 	)
-	emailWorker.Start(context.TODO())
+	startWorker(ctx, emailWorker, "EmailWorker")
 
 	whatsappWorker := workers.NewWhatsAppWorker(
-		sqsService,
-		whatsappService,
-		audienceRepo,
-		contactRepo,
-		campaignRepo,
-		accountRepo,
-		accountSettingsRepo,
-		campaignSettingsRepo,
-		openAIService,
+		sqsService, whatsappService, audienceRepo, contactRepo, campaignRepo,
+		accountRepo, accountSettingsRepo, campaignSettingsRepo, openAIService,
 	)
-	whatsappWorker.Start(context.TODO())
+	startWorker(ctx, whatsappWorker, "WhatsAppWorker")
 
-	// Criar o servidor HTTP
+	// Criar servidor HTTP com middleware CORS
 	port := os.Getenv("APP_PORT")
+	mux := http.NewServeMux()
+
+	// 🔥 Aplica CORS a todas as rotas
+	router := middleware.CORSMiddleware(routes.NewRouter(
+		otpRepo, accountRepo, accountSettingsRepo, contactRepo,
+		templateRepo, campaignRepo, audienceRepo, campaignSettingsRepo,
+		openAIService, campaignProcessor,
+	))
+
+	mux.Handle("/", router)
+
 	srv := &http.Server{
-		Addr: fmt.Sprintf(":%s", port),
-		Handler: routes.NewRouter(
-			otpRepo, accountRepo,
-			accountSettingsRepo,
-			contactRepo,
-			templateRepo,
-			campaignRepo,
-			audienceRepo,
-			campaignSettingsRepo,
-			openAIService,
-			campaignProcessor,
-		),
+		Addr:    fmt.Sprintf(":%s", port),
+		Handler: mux,
 	}
 
-	// Canal para capturar sinais do sistema
+	// Capturar sinais do sistema
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
-	// Iniciar o servidor em uma goroutine
+	// Iniciar servidor em goroutine
 	go func() {
-		log.Info("🚀 Servidor rodando em http://localhost:8080")
+		log.Info("🚀 Servidor rodando em http://localhost:" + port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("Erro ao iniciar o servidor: " + err.Error())
 		}
@@ -117,11 +117,15 @@ func main() {
 	<-stop
 	log.Info("⚠️  Sinal recebido! Encerrando servidor...")
 
-	// Criar um contexto com timeout para shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// Enviar sinal de cancelamento para os workers
+	cancel()
+	time.Sleep(2 * time.Second) // Dá tempo para os workers finalizarem
 
-	if err := srv.Shutdown(ctx); err != nil {
+	// Criar contexto com timeout para desligamento do servidor
+	ctxShutdown, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelShutdown()
+
+	if err := srv.Shutdown(ctxShutdown); err != nil {
 		log.Error("Erro ao desligar o servidor: " + err.Error())
 	} else {
 		log.Info("✅ Servidor encerrado com sucesso.")

@@ -11,10 +11,10 @@ import (
 
 // CampaignCreateDTO define os dados para criar uma campanha
 type CampaignCreateDTO struct {
-	Name        string                 `json:"name"`
-	Description *string                `json:"description,omitempty"`
-	Channels    models.ChannelsConfig  `json:"channels"`
-	Filters     models.AudienceFilters `json:"filters"`
+	Name        string                  `json:"name"`
+	Description *string                 `json:"description,omitempty"`
+	Channels    models.ChannelsConfig   `json:"channels"`
+	Filters     *models.AudienceFilters `json:"filters"`
 }
 
 // Validate valida os dados do CampaignCreateDTO
@@ -42,7 +42,7 @@ type CampaignUpdateDTO struct {
 	Description *string                 `json:"description,omitempty"`
 	Channels    *models.ChannelsConfig  `json:"channels,omitempty"`
 	Filters     *models.AudienceFilters `json:"filters,omitempty"`
-	Status      *string                 `json:"status,omitempty"`
+	Status      *models.CampaignStatus  `json:"status,omitempty"`
 }
 
 // Validate valida os dados do CampaignUpdateDTO
@@ -51,7 +51,7 @@ func (c *CampaignUpdateDTO) Validate() error {
 		return errors.New("pelo menos um canal deve ser definido")
 	}
 	if c.Status != nil {
-		validStatuses := map[string]bool{"pendente": true, "ativa": true, "concluida": true}
+		validStatuses := map[models.CampaignStatus]bool{models.StatusPendente: true, models.StatusAtiva: true, models.StatusConcluida: true}
 		if !validStatuses[*c.Status] {
 			return errors.New("status inválido, deve ser 'pendente', 'ativa' ou 'concluida'")
 		}
@@ -61,29 +61,30 @@ func (c *CampaignUpdateDTO) Validate() error {
 
 // CampaignUpdateStatusDTO define os dados permitidos para atualização de status da campanha
 type CampaignUpdateStatusDTO struct {
-	Status string `json:"status"`
+	Status models.CampaignStatus `json:"status"`
 }
 
 // Validate valida os dados do CampaignUpdateStatusDTO
 func (c *CampaignUpdateStatusDTO) Validate() error {
-	validStatuses := map[string]bool{"pendente": true, "ativa": true, "concluida": true}
+	validStatuses := map[models.CampaignStatus]bool{models.StatusPendente: true, models.StatusAtiva: true, models.StatusConcluida: true}
 	if !validStatuses[c.Status] {
 		return errors.New("status inválido, deve ser 'pendente', 'ativa' ou 'concluida'")
 	}
+
 	return nil
 }
 
 // CampaignResponseDTO estrutura a resposta para campanhas
 type CampaignResponseDTO struct {
-	ID          string                 `json:"id"`
-	AccountID   string                 `json:"account_id"`
-	Name        string                 `json:"name"`
-	Description *string                `json:"description,omitempty"`
-	Channels    models.ChannelsConfig  `json:"channels"`
-	Filters     models.AudienceFilters `json:"filters"`
-	Status      string                 `json:"status"`
-	CreatedAt   string                 `json:"created_at"`
-	UpdatedAt   string                 `json:"updated_at"`
+	ID          string                  `json:"id"`
+	AccountID   string                  `json:"account_id"`
+	Name        string                  `json:"name"`
+	Description *string                 `json:"description,omitempty"`
+	Channels    models.ChannelsConfig   `json:"channels"`
+	Filters     *models.AudienceFilters `json:"filters,omitempty"`
+	Status      models.CampaignStatus   `json:"status"`
+	CreatedAt   string                  `json:"created_at"`
+	UpdatedAt   string                  `json:"updated_at"`
 }
 
 // NewCampaignResponseDTO converte um modelo `Campaign` para um DTO de resposta

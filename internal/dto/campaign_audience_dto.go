@@ -11,8 +11,8 @@ import (
 
 // CampaignAudienceCreateDTO define os dados para adicionar contatos à audiência de uma campanha
 type CampaignAudienceCreateDTO struct {
-	ContactIDs []uuid.UUID `json:"contact_ids"`
-	Type       *string     `json:"type"`
+	ContactIDs []uuid.UUID         `json:"contact_ids"`
+	Type       *models.ChannelType `json:"type"`
 }
 
 // Validate valida os dados do CampaignAudienceCreateDTO
@@ -31,8 +31,8 @@ type CampaignAudienceResponseDTO struct {
 	ID         string                  `json:"id"`
 	CampaignID string                  `json:"campaign_id"`
 	ContactID  string                  `json:"contact_id"`
-	Type       string                  `json:"type"`
-	Status     string                  `json:"status"`
+	Type       models.ChannelType      `json:"type"`
+	Status     models.CampaignStatus   `json:"status"`
 	MessageID  *string                 `json:"message_id,omitempty"`
 	Feedback   *map[string]interface{} `json:"feedback_api,omitempty"`
 	CreatedAt  string                  `json:"created_at"`
