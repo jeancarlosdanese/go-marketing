@@ -25,7 +25,6 @@ type TemplateUpdateDTO struct {
 // TemplateResponseDTO estrutura a resposta para um template
 type TemplateResponseDTO struct {
 	ID          string             `json:"id"`
-	AccountID   string             `json:"account_id"`
 	Name        string             `json:"name"`
 	Description *string            `json:"description,omitempty"`
 	Channel     models.ChannelType `json:"channel"` // Usa o enum definido em `constants.go`
@@ -37,7 +36,6 @@ type TemplateResponseDTO struct {
 func NewTemplateResponseDTO(template *models.Template) TemplateResponseDTO {
 	return TemplateResponseDTO{
 		ID:          template.ID.String(),
-		AccountID:   template.AccountID.String(),
 		Name:        template.Name,
 		Description: template.Description,
 		Channel:     template.Channel,

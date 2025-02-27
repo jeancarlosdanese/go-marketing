@@ -19,7 +19,7 @@ func RegisterContactRoutes(mux *http.ServeMux, authMiddleware func(http.Handler)
 
 	// 🔒 Todas as rotas exigem autenticação
 	mux.Handle("POST /contacts", authMiddleware(handler.CreateContactHandler()))        // Criar contato
-	mux.Handle("GET /contacts", authMiddleware(handler.GetAllContactsHandler()))        // Listar contatos da conta autenticada
+	mux.Handle("GET /contacts", authMiddleware(handler.GetPaginatedContactsHandler()))  // Listar contatos da conta autenticada
 	mux.Handle("GET /contacts/{id}", authMiddleware(handler.GetContactHandler()))       // Buscar contato por ID
 	mux.Handle("PUT /contacts/{id}", authMiddleware(handler.UpdateContactHandler()))    // Atualizar contato
 	mux.Handle("DELETE /contacts/{id}", authMiddleware(handler.DeleteContactHandler())) // Deletar contato

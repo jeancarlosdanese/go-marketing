@@ -1,3 +1,5 @@
+// File: /internal/models/template.go
+
 package models
 
 import (

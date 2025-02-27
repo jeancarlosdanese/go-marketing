@@ -165,7 +165,7 @@ func (s *contactImportService) processRecord(ctx context.Context, record []strin
 		Bairro:    contactDTO.Bairro,
 		Cidade:    contactDTO.Cidade,
 		Estado:    contactDTO.Estado,
-		Tags:      contactDTO.Tags,
+		Tags:      &contactDTO.Tags,
 		History:   contactDTO.History,
 	}
 

@@ -33,17 +33,17 @@ func (c *ContactCreateDTO) Validate() error {
 		return errors.New("o nome é obrigatório")
 	}
 
-	if c.Email == nil && c.WhatsApp == nil {
+	if (c.Email == nil || *c.Email == "") && (c.WhatsApp == nil || *c.WhatsApp == "") {
 		return errors.New("é necessário fornecer um e-mail ou WhatsApp")
 	}
 
-	if c.Email != nil {
+	if c.Email != nil && *c.Email != "" {
 		if err := utils.ValidateEmail(*c.Email); err != nil {
 			return errors.New("e-mail inválido: " + err.Error())
 		}
 	}
 
-	if c.WhatsApp != nil {
+	if c.WhatsApp != nil && *c.WhatsApp != "" {
 		if err := utils.ValidateWhatsApp(*c.WhatsApp); err != nil {
 			return errors.New("número de WhatsApp inválido: " + err.Error())
 		}
@@ -55,14 +55,8 @@ func (c *ContactCreateDTO) Validate() error {
 		}
 	}
 
-	if c.BirthDate != nil {
+	if c.BirthDate != nil && *c.BirthDate != "" {
 		if err := utils.ValidateDate(*c.BirthDate); err != nil {
-			return err
-		}
-	}
-
-	if c.LastContactAt != nil {
-		if err := utils.ValidateDate(*c.LastContactAt); err != nil {
 			return err
 		}
 	}
@@ -183,7 +177,7 @@ func NewContactResponseDTO(contact *models.Contact) ContactResponseDTO {
 		Bairro:        contact.Bairro,
 		Cidade:        contact.Cidade,
 		Estado:        contact.Estado,
-		Tags:          contact.Tags,
+		Tags:          *contact.Tags,
 		History:       contact.History,
 		OptOutAt:      optOutAt,
 		LastContactAt: lastContactAt,

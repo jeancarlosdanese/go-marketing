@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +20,7 @@ import (
 
 type ContactHandle interface {
 	CreateContactHandler() http.HandlerFunc
+	GetPaginatedContactsHandler() http.HandlerFunc
 	GetAllContactsHandler() http.HandlerFunc
 	GetContactHandler() http.HandlerFunc
 	UpdateContactHandler() http.HandlerFunc
@@ -77,7 +79,7 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 			Bairro:    contactDTO.Bairro,
 			Cidade:    contactDTO.Cidade,
 			Estado:    contactDTO.Estado,
-			Tags:      contactDTO.Tags,
+			Tags:      &contactDTO.Tags,
 			History:   contactDTO.History,
 		}
 
@@ -118,6 +120,56 @@ func (h *contactHandle) CreateContactHandler() http.HandlerFunc {
 		)
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(dto.NewContactResponseDTO(createdContact))
+	}
+}
+
+// GetPaginatedContactsHandler retorna contatos paginados com filtros dinâmicos
+func (h *contactHandle) GetPaginatedContactsHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.log.Debug("Buscando contatos paginados")
+
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
+
+		// Capturar parâmetros de paginação e ordenação
+		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+		sort := r.URL.Query().Get("sort")
+
+		h.log.Debug("Parâmetros de paginação",
+			slog.Int("page", page),
+			slog.Int("per_page", perPage),
+			slog.String("sort", sort),
+		)
+
+		// Capturar filtros dinâmicos
+		filters := map[string]string{}
+		for _, key := range []string{"name", "email", "whatsapp", "gender", "birth_date_start", "birth_date_end", "bairro", "cidade", "estado", "interesses", "perfil", "eventos"} {
+			if value := r.URL.Query().Get(key); value != "" {
+				filters[key] = value
+			}
+		}
+
+		// Capturar filtros de tags e interesses
+		h.log.Debug("Filtros dinâmicos", slog.Group("filters", slog.Any("filters", filters)))
+
+		// Buscar contatos paginados
+		paginator, err := h.repo.GetPaginatedContacts(r.Context(), authAccount.ID, filters, sort, page, perPage)
+		if err != nil {
+			h.log.Error("Erro ao buscar contatos", "error", err)
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar contatos")
+			return
+		}
+
+		h.log.Debug("Contatos paginados",
+			slog.Int("total", paginator.TotalRecords),
+			slog.Int("page", paginator.CurrentPage),
+			slog.Int("per_page", paginator.PerPage),
+			slog.Int("total_pages", paginator.TotalPages),
+		)
+
+		// Responder com JSON
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(paginator)
 	}
 }
 
@@ -246,7 +298,7 @@ func (h *contactHandle) UpdateContactHandler() http.HandlerFunc {
 		}
 
 		if contactDTO.Tags != nil {
-			contact.Tags = *contactDTO.Tags
+			contact.Tags = contactDTO.Tags
 		}
 		if contactDTO.History != nil {
 			contact.History = contactDTO.History

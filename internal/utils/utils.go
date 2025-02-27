@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -30,6 +31,15 @@ func SafeString(s *string) string {
 	return *s
 }
 
+// SafeStringMap evita nil pointer dereference ao acessar mapas de strings opcionais.
+func SafeStringMap(m map[string]*string, key string) string {
+	if m[key] == nil {
+		return "N/A"
+	}
+	return *m[key]
+}
+
+// SendError envia um erro HTTP com o código e mensagem fornecidos.
 func SanitizeJSONResponse(rawJSON string) string {
 	rawJSON = strings.TrimSpace(rawJSON)               // Remove espaços extras
 	rawJSON = strings.TrimPrefix(rawJSON, "```json\n") // Remove cabeçalho errado
@@ -37,6 +47,7 @@ func SanitizeJSONResponse(rawJSON string) string {
 	return rawJSON
 }
 
+// SendError envia um erro HTTP com o código e mensagem fornecidos.
 func GetUUIDFromRequestPath(r *http.Request, w http.ResponseWriter, variable string) uuid.UUID {
 	idParam := r.PathValue(variable)
 	id, err := uuid.Parse(idParam)
@@ -46,4 +57,9 @@ func GetUUIDFromRequestPath(r *http.Request, w http.ResponseWriter, variable str
 	}
 
 	return id
+}
+
+// ParseDate parseia uma string de data no formato "yyyy-mm-dd".
+func ParseDate(date string) (time.Time, error) {
+	return time.Parse("2006-01-02", date)
 }
