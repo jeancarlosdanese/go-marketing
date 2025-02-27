@@ -5,7 +5,9 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -57,8 +59,8 @@ func (s *sqsService) SendMessage(ctx context.Context, queueName string, message 
 	} else if queueName == "whatsapp" {
 		queueURL = s.whatsappQueueURL
 	} else {
-		s.log.Warn("Tipo de fila inválido", "queueName", queueName)
-		return nil
+		s.log.Warn("Nome de fila inválido", "queueName", queueName)
+		return fmt.Errorf("nome de fila inválido: %s", queueName)
 	}
 
 	// 🚀 Serializa apenas uma vez
@@ -91,53 +93,79 @@ func (s *sqsService) ReceiveMessages(ctx context.Context, queueName string, hand
 	} else if queueName == "whatsapp" {
 		queueURL = s.whatsappQueueURL
 	} else {
-		s.log.Warn("Tipo de fila inválido", "queueName", queueName)
-		return nil
+		s.log.Warn("Nome da fila inválido", "queueName", queueName)
+		return fmt.Errorf("nome da fila inválida: %s", queueName)
 	}
 
+	ticker := time.NewTicker(10 * time.Second) // 🔥 Controla as execuções para evitar loop infinito sem pausas
+	defer ticker.Stop()
+
+	retries := 0
+	maxRetries := 5
+
 	for {
-		msgResult, err := s.client.ReceiveMessage(context.TODO(), &sqs.ReceiveMessageInput{
-			QueueUrl:            aws.String(queueURL),
-			MaxNumberOfMessages: 10,
-			WaitTimeSeconds:     10,
-		})
-		if err != nil {
-			s.log.Error("Erro ao receber mensagens do SQS", "queue", queueName, "error", err)
-			continue
-		}
-
-		for _, message := range msgResult.Messages {
-			s.log.Info("📩 Mensagem recebida do SQS", "queue", queueName, "message_id", *message.MessageId)
-
-			// 🔍 Remover aspas extras caso existam
-			var rawMessage *string
-			if err := json.Unmarshal([]byte(*message.Body), &rawMessage); err == nil {
-				s.log.Debug("Mensagem estava aninhada, extraindo JSON real...")
-			} else {
-				rawMessage = message.Body
-			}
-
-			// 🔄 Desserializar JSON da mensagem diretamente para a estrutura correta
-			var campaignMessage dto.CampaignMessageDTO
-			if err := json.Unmarshal([]byte(*rawMessage), &campaignMessage); err != nil {
-				s.log.Error("Erro ao decodificar mensagem do SQS", "error", err, "raw_msg", rawMessage)
-				continue
-			}
-
-			s.log.Info("📦 Mensagem decodificada com sucesso", "queue", queueName, "contact_id", campaignMessage.ContactID)
-			// 🚀 Chama a função de processamento do worker
-			if err := handler(campaignMessage); err != nil {
-				s.log.Error("Erro ao processar mensagem", "error", err)
-				continue
-			}
-
-			// 🗑️ Remover mensagem da fila após processamento
-			_, err := s.client.DeleteMessage(context.TODO(), &sqs.DeleteMessageInput{
-				QueueUrl:      aws.String(queueURL),
-				ReceiptHandle: message.ReceiptHandle,
+		select {
+		case <-ctx.Done(): // 🔥 Permite encerrar a rotina corretamente quando a aplicação for desligada
+			s.log.Info("Encerrando consumo de mensagens do SQS", "queue", queueName)
+			return nil
+		case <-ticker.C: // 🔄 Aguarda o tempo definido antes de rodar novamente
+			msgResult, err := s.client.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
+				QueueUrl:            aws.String(queueURL),
+				MaxNumberOfMessages: 10,
+				WaitTimeSeconds:     10, // 🔥 Long Polling (reduz consumo de CPU e requisições)
 			})
+
 			if err != nil {
-				s.log.Error("Erro ao deletar mensagem do SQS", "queue", queueName, "error", err)
+				s.log.Error("Erro ao receber mensagens do SQS", "queue", queueName, "error", err)
+
+				// 🔄 Aguarda antes de tentar novamente
+				retries++
+				if retries > maxRetries {
+					s.log.Error(fmt.Sprintf("Número máximo (%d) de tentativas excedido, abandonando tentativa de conexão", maxRetries))
+					// TODO: Adicionar um alerta ou notificação para o time de DevOps (email, WhatsApp, etc)
+					return fmt.Errorf("número máximo (%d) de tentativas excedido, abandonando tentativa de conexão", maxRetries)
+				}
+				time.Sleep(time.Duration(retries) * time.Second)
+				continue
+			}
+
+			// 🔄 Sempre resetamos o contador de retries ao final da execução
+			retries = 0
+
+			for _, message := range msgResult.Messages {
+				s.log.Info("📩 Mensagem recebida do SQS", "queue", queueName, "message_id", *message.MessageId)
+
+				// 🔍 Remover aspas extras caso existam
+				var rawMessage *string
+				if err := json.Unmarshal([]byte(*message.Body), &rawMessage); err == nil {
+					s.log.Debug("Mensagem estava aninhada, extraindo JSON real...")
+				} else {
+					rawMessage = message.Body
+				}
+
+				// 🔄 Desserializar JSON da mensagem diretamente para a estrutura correta
+				var campaignMessage dto.CampaignMessageDTO
+				if err := json.Unmarshal([]byte(*rawMessage), &campaignMessage); err != nil {
+					s.log.Error("Erro ao decodificar mensagem do SQS", "error", err, "raw_msg", rawMessage)
+					continue
+				}
+
+				s.log.Info("📦 Mensagem decodificada com sucesso", "queue", queueName, "contact_id", campaignMessage.ContactID)
+
+				// 🚀 Chama a função de processamento do worker
+				if err := handler(campaignMessage); err != nil {
+					s.log.Error("Erro ao processar mensagem", "error", err)
+					continue
+				}
+
+				// 🗑️ Remover mensagem da fila após processamento
+				_, err := s.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
+					QueueUrl:      aws.String(queueURL),
+					ReceiptHandle: message.ReceiptHandle,
+				})
+				if err != nil {
+					s.log.Error("Erro ao deletar mensagem do SQS", "queue", queueName, "error", err)
+				}
 			}
 		}
 	}
