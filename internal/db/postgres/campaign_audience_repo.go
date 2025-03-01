@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/dto"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
+	"github.com/jeancarlosdanese/go-marketing/internal/utils"
 )
 
 type campaignAudienceRepo struct {
@@ -67,6 +69,104 @@ func (r *campaignAudienceRepo) AddContactsToCampaign(ctx context.Context, campai
 	}
 
 	return audiences, nil
+}
+
+// Adiciona todos os contatos filtrados à audiência da campanha
+func (r *campaignAudienceRepo) AddAllFilteredContacts(ctx context.Context, accountID uuid.UUID, campaignID uuid.UUID, filters *map[string]string, channelType models.ChannelType) error {
+	// 🔍 Query base para buscar contatos filtrados
+	selectQuery := `
+		SELECT id
+		FROM contacts
+		WHERE account_id = $1 
+		AND opt_out_at IS NULL 
+		AND id NOT IN (SELECT contact_id FROM campaigns_audience WHERE campaign_id = $2)
+	`
+
+	if channelType == models.EmailChannel {
+		selectQuery += " AND email IS NOT NULL"
+	} else if channelType == models.WhatsappChannel {
+		selectQuery += " AND whatsapp IS NOT NULL"
+	}
+
+	args := []interface{}{accountID, campaignID}
+	filterIndex := 3
+
+	// 🔍 Aplicar filtros dinâmicos
+	if filters != nil && len(*filters) > 0 {
+		for key, value := range *filters {
+			switch key {
+			case "name", "email", "whatsapp", "cidade", "estado", "bairro":
+				selectQuery += fmt.Sprintf(" AND %s ILIKE $%d", key, filterIndex)
+				args = append(args, "%"+value+"%")
+			case "gender":
+				selectQuery += fmt.Sprintf(" AND gender = $%d", filterIndex)
+				args = append(args, value)
+			case "birth_date_start":
+				selectQuery += fmt.Sprintf(" AND birth_date >= $%d", filterIndex)
+				dateValue, err := utils.ParseDate(value)
+				if err != nil {
+					return fmt.Errorf("erro ao converter data: %w", err)
+				}
+				args = append(args, dateValue)
+			case "birth_date_end":
+				selectQuery += fmt.Sprintf(" AND birth_date <= $%d", filterIndex)
+				dateValue, err := utils.ParseDate(value)
+				if err != nil {
+					return fmt.Errorf("erro ao converter data: %w", err)
+				}
+				args = append(args, dateValue)
+			case "last_contact_at":
+				selectQuery += fmt.Sprintf(" AND last_contact_at >= $%d", filterIndex)
+				dateValue, err := utils.ParseDate(value)
+				if err != nil {
+					return fmt.Errorf("erro ao converter data: %w", err)
+				}
+				args = append(args, dateValue)
+			case "interesses", "perfil", "eventos", "tags":
+				selectQuery += fmt.Sprintf(" AND tags::jsonb @> $%d", filterIndex)
+				args = append(args, value)
+			}
+			filterIndex++
+		}
+	}
+
+	// 🔹 Buscar IDs dos contatos disponíveis
+	rows, err := r.db.QueryContext(ctx, selectQuery, args...)
+	if err != nil {
+		return fmt.Errorf("erro ao buscar contatos disponíveis: %w", err)
+	}
+	defer rows.Close()
+
+	// 🔍 Criar inserção em lote
+	var placeholders []string
+	insertArgs := []interface{}{campaignID} // Primeiro argumento é o ID da campanha
+	insertIndex := 2
+
+	for rows.Next() {
+		var contactID uuid.UUID
+		if err := rows.Scan(&contactID); err != nil {
+			return fmt.Errorf("erro ao escanear contatos disponíveis: %w", err)
+		}
+
+		placeholders = append(placeholders, fmt.Sprintf("($1, $%d, $%d)", insertIndex, insertIndex+1))
+		insertArgs = append(insertArgs, contactID, channelType)
+		insertIndex += 2
+	}
+
+	// 🔹 Executar INSERT em lote
+	if len(placeholders) > 0 {
+		insertQuery := fmt.Sprintf(`
+			INSERT INTO campaigns_audience (campaign_id, contact_id, type) 
+			VALUES %s
+			ON CONFLICT (campaign_id, contact_id) DO NOTHING`, strings.Join(placeholders, ","),
+		)
+
+		if _, err := r.db.ExecContext(ctx, insertQuery, insertArgs...); err != nil {
+			return fmt.Errorf("erro ao inserir contatos filtrados: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // GetCampaignAudience retorna a audiência de uma campanha junto com os detalhes dos contatos
@@ -295,4 +395,10 @@ func (r *campaignAudienceRepo) GetPaginatedCampaignAudience(
 		PerPage:      perPage,
 		Data:         audience,
 	}, nil
+}
+
+// RemoveAllContactsFromCampaign remove todos os contatos de uma campanha
+func (r *campaignAudienceRepo) RemoveAllContactsFromCampaign(ctx context.Context, campaignID uuid.UUID) error {
+	_, err := r.db.Exec(`DELETE FROM campaigns_audience WHERE campaign_id = $1`, campaignID)
+	return err
 }

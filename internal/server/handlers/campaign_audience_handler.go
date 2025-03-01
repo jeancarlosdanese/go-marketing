@@ -17,11 +17,13 @@ import (
 )
 
 type CampaignAudienceHandle interface {
+	AddContactsToCampaignHandler() http.HandlerFunc
+	AddAllFilteredContactsHandler() http.HandlerFunc
 	GetAvailableContactsHandler() http.HandlerFunc
 	GetPaginatedCampaignAudienceHandler() http.HandlerFunc
-	AddContactsToCampaignHandler() http.HandlerFunc
 	GetCampaignAudienceHandler() http.HandlerFunc
 	RemoveContactFromCampaignHandler() http.HandlerFunc
+	RemoveAllContactsFromCampaignHandler() http.HandlerFunc
 }
 
 type campaignAudienceHandle struct {
@@ -57,7 +59,7 @@ func (h *campaignAudienceHandle) GetAvailableContactsHandler() http.HandlerFunc 
 		h.validateOwnerCampaign(r, w, campaignID)
 
 		// 🔍 Capturar filtros da query string
-		filters := utils.ExtractQueryFilters(r.URL.Query(), []string{"name", "email", "whatsapp", "cidade", "estado", "tags"})
+		filters := utils.ExtractQueryFilters(r.URL.Query(), []string{"name", "email", "whatsapp", "cidade", "estado", "bairro", "gender", "birth_date_start", "birth_date_end", "last_contact_at", "interesses", "perfil", "eventos", "tags"})
 		page, perPage, sort := utils.ExtractPaginationParams(r)
 
 		// 🔍 Buscar contatos disponíveis para a campanha
@@ -160,6 +162,60 @@ func (h *campaignAudienceHandle) AddContactsToCampaignHandler() http.HandlerFunc
 	}
 }
 
+// ✅ **Adicionar todos os contatos filtrados a uma campanha**
+func (h *campaignAudienceHandle) AddAllFilteredContactsHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 🔍 Buscar conta autenticada
+		authAccount := r.Context().Value(middleware.AuthAccountKey).(*models.Account)
+
+		// 🔍 Buscar ID da campanha
+		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
+
+		// Validar se a campanha pertence ao usuário autenticado
+		h.validateOwnerCampaign(r, w, campaignID)
+
+		campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
+		if err != nil {
+			h.log.Warn("Erro ao buscar campanha", "campaign_id", campaignID, "error", err)
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar campanha")
+			return
+		}
+
+		// 📝 Decodificar JSON
+		var requestDTO dto.CampaignAudienceCreateByFilterDTO
+		if err := json.NewDecoder(r.Body).Decode(&requestDTO); err != nil {
+			h.log.Warn("Erro ao decodificar JSON", "error", err)
+			utils.SendError(w, http.StatusBadRequest, "Erro ao processar requisição")
+			return
+		}
+		defer r.Body.Close()
+
+		// 🔍 Buscar contatos e garantir que pertencem ao usuário autenticado
+		for _, channelType := range models.AllowedChannels {
+			// 🛑 Ignorar canais não configurados
+			if _, ok := campaign.Channels[string(channelType)]; !ok {
+				continue
+			}
+
+			err := h.audienceRepo.AddAllFilteredContacts(r.Context(), authAccount.ID, campaignID, requestDTO.Filters, channelType)
+			if err != nil {
+				utils.SendError(w, http.StatusInternalServerError, "Erro ao adicionar contatos")
+				return
+			}
+		}
+
+		paginator, err := h.audienceRepo.GetPaginatedCampaignAudience(r.Context(), campaignID, nil, requestDTO.CurrentPage, requestDTO.PerPage)
+		if err != nil {
+			h.log.Error("Erro ao buscar audiência paginada", "error", err)
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar audiência da campanha")
+			return
+		}
+
+		h.log.Info("Contatos adicionados à campanha com sucesso", "campaign_id", campaignID, "total", paginator.TotalRecords)
+		utils.SendSuccess(w, http.StatusCreated, paginator)
+	}
+}
+
 // ✅ **Obter audiência da campanha com paginação**
 func (h *campaignAudienceHandle) GetPaginatedCampaignAudienceHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -237,6 +293,26 @@ func (h *campaignAudienceHandle) RemoveContactFromCampaignHandler() http.Handler
 		}
 
 		h.log.Info("Contato removido da campanha com sucesso", "campaign_id", campaignID, "contact_id", audienceID)
+		utils.SendSuccess(w, http.StatusNoContent, nil)
+	}
+}
+
+// ✅ **Remover todos os contatos de uma campanha**
+func (h *campaignAudienceHandle) RemoveAllContactsFromCampaignHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 🔍 Buscar ID da campanha
+		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
+
+		h.validateOwnerCampaign(r, w, campaignID)
+
+		// 🚀 Remover todos os contatos da campanha
+		if err := h.audienceRepo.RemoveAllContactsFromCampaign(r.Context(), campaignID); err != nil {
+			h.log.Error("Erro ao remover todos os contatos da campanha", "campaign_id", campaignID, "error", err)
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao remover todos os contatos da campanha")
+			return
+		}
+
+		h.log.Info("Todos os contatos removidos da campanha com sucesso", "campaign_id", campaignID)
 		utils.SendSuccess(w, http.StatusNoContent, nil)
 	}
 }

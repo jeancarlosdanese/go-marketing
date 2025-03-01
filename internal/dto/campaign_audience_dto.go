@@ -15,6 +15,14 @@ type CampaignAudienceCreateDTO struct {
 	Type       *models.ChannelType `json:"type"`
 }
 
+// CampaignAudienceCreateByFilterDTO define os dados para filtrar a audiência de uma campanha
+type CampaignAudienceCreateByFilterDTO struct {
+	// "name", "email", "whatsapp", "cidade", "estado", "bairro", "gender", "birth_date_start", "birth_date_end", "last_contact_at", "interesses", "perfil", "eventos", "tags"
+	Filters     *map[string]string `json:"filters"`
+	CurrentPage int                `json:"current_page"` // Página atual
+	PerPage     int                `json:"per_page"`     // Registros por página
+}
+
 // Validate valida os dados do CampaignAudienceCreateDTO
 func (c *CampaignAudienceCreateDTO) Validate() error {
 	if len(c.ContactIDs) == 0 {
@@ -22,6 +30,17 @@ func (c *CampaignAudienceCreateDTO) Validate() error {
 	}
 	if c.Type != nil && *c.Type != "email" && *c.Type != "whatsapp" {
 		return errors.New("o tipo deve ser 'email' ou 'whatsapp'")
+	}
+	return nil
+}
+
+// Validate valida os dados do CampaignAudienceCreateByFilterDTO
+func (c *CampaignAudienceCreateByFilterDTO) Validate() error {
+	if c.CurrentPage <= 1 {
+		return errors.New("current_page deve ser maior que 0")
+	}
+	if c.PerPage <= 1 {
+		return errors.New("per_page deve ser maior que 0")
 	}
 	return nil
 }
