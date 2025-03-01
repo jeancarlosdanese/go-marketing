@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -131,9 +130,7 @@ func (h *contactHandle) GetPaginatedContactsHandler() http.HandlerFunc {
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
 		// Capturar parâmetros de paginação e ordenação
-		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-		perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
-		sort := r.URL.Query().Get("sort")
+		page, perPage, sort := utils.ExtractPaginationParams(r)
 
 		h.log.Debug("Parâmetros de paginação",
 			slog.Int("page", page),

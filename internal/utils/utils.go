@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,4 +63,34 @@ func GetUUIDFromRequestPath(r *http.Request, w http.ResponseWriter, variable str
 // ParseDate parseia uma string de data no formato "yyyy-mm-dd".
 func ParseDate(date string) (time.Time, error) {
 	return time.Parse("2006-01-02", date)
+}
+
+// ExtractPaginationParams extrai os parâmetros de paginação da query string
+func ExtractPaginationParams(r *http.Request) (int, int, string) {
+	// Padrões caso não sejam passados na URL
+	defaultPage := 1
+	defaultPerPage := 10
+	defaultSort := "updated_at DESC"
+
+	// Extrair `page` da query string (com fallback para o valor padrão)
+	pageParam := r.URL.Query().Get("page")
+	page, err := strconv.Atoi(pageParam)
+	if err != nil || page < 1 {
+		page = defaultPage
+	}
+
+	// Extrair `per_page` da query string (com fallback para o valor padrão)
+	perPageParam := r.URL.Query().Get("per_page")
+	perPage, err := strconv.Atoi(perPageParam)
+	if err != nil || perPage < 1 {
+		perPage = defaultPerPage
+	}
+
+	// Extrair `sort` da query string (com fallback para o valor padrão)
+	sort := r.URL.Query().Get("sort")
+	if sort == "" {
+		sort = defaultSort
+	}
+
+	return page, perPage, sort
 }

@@ -139,12 +139,15 @@ func (r *contactRepo) GetPaginatedContacts(
 	filterIndex := 2
 
 	// Aplicar filtros dinâmicos
-	// Aplicar filtros dinâmicos
 	for key, value := range filters {
 		switch key {
 		case "name", "email", "whatsapp", "cidade", "estado", "bairro":
 			baseQuery += fmt.Sprintf(" AND %s ILIKE $%d", key, filterIndex)
 			args = append(args, "%"+value+"%")
+			filterIndex++
+		case "gender":
+			baseQuery += fmt.Sprintf(" AND gender = $%d", filterIndex)
+			args = append(args, value)
 			filterIndex++
 		case "birth_date_start":
 			baseQuery += fmt.Sprintf(" AND birth_date >= $%d", filterIndex)
@@ -185,12 +188,15 @@ func (r *contactRepo) GetPaginatedContacts(
 			baseQuery += fmt.Sprintf(" AND tags->>'eventos' ILIKE $%d", filterIndex)
 			args = append(args, "%"+value+"%")
 			filterIndex++
+		case "tags":
+			// Busca qualquer tag que contenha o valor passado
+			baseQuery += fmt.Sprintf(" AND tags::text ILIKE $%d", filterIndex)
+			args = append(args, "%"+value+"%")
+			filterIndex++
 		}
 	}
 
 	// Contar total de registros antes da paginação
-	// countQuery := "SELECT COUNT(*) FROM contacts WHERE account_id = $1 AND opt_out_at IS NULL"
-
 	countQuery := "SELECT COUNT(*) FROM (" + baseQuery + ") AS total"
 	var totalRecords int
 	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalRecords); err != nil {
@@ -411,4 +417,137 @@ func (r *contactRepo) DeleteByID(ctx context.Context, contactID uuid.UUID) error
 		slog.String("contact_id", contactID.String()))
 
 	return nil
+}
+
+// ✅ **Buscar contatos disponíveis para uma campanha**
+// GetAvailableContactsForCampaign busca contatos com paginação e filtros, excluindo os que já estão na campanha
+func (r *contactRepo) GetAvailableContactsForCampaign(
+	ctx context.Context,
+	accountID uuid.UUID,
+	campaignID uuid.UUID,
+	filters map[string]string,
+	sort string,
+	currentPage int,
+	perPage int,
+) (*models.Paginator, error) {
+	// Garantir valores mínimos para paginação
+	if currentPage < 1 {
+		currentPage = 1
+	}
+	if perPage < 1 {
+		perPage = 10
+	}
+
+	// Query base (excluindo contatos que já estão na audiência da campanha)
+	baseQuery := `
+		SELECT id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, tags, last_contact_at, created_at, updated_at
+		FROM contacts
+		WHERE account_id = $1 
+		AND opt_out_at IS NULL 
+		AND id NOT IN (SELECT contact_id FROM campaigns_audience WHERE campaign_id = $2)
+	`
+
+	args := []interface{}{accountID, campaignID}
+	filterIndex := 3
+
+	// Aplicar filtros dinâmicos (mantendo a mesma lógica do método original)
+	for key, value := range filters {
+		switch key {
+		case "name", "email", "whatsapp", "cidade", "estado", "bairro":
+			baseQuery += fmt.Sprintf(" AND %s ILIKE $%d", key, filterIndex)
+			args = append(args, "%"+value+"%")
+		case "gender":
+			baseQuery += fmt.Sprintf(" AND gender = $%d", filterIndex)
+			args = append(args, value)
+		case "birth_date_start":
+			baseQuery += fmt.Sprintf(" AND birth_date >= $%d", filterIndex)
+			startDate, err := utils.ParseDate(value)
+			if err != nil {
+				return nil, fmt.Errorf("erro ao converter data de nascimento: %w", err)
+			}
+			args = append(args, startDate)
+		case "birth_date_end":
+			baseQuery += fmt.Sprintf(" AND birth_date <= $%d", filterIndex)
+			endDate, err := utils.ParseDate(value)
+			if err != nil {
+				return nil, fmt.Errorf("erro ao converter data de nascimento: %w", err)
+			}
+			args = append(args, endDate)
+		case "last_contact_at":
+			baseQuery += fmt.Sprintf(" AND last_contact_at >= $%d", filterIndex)
+			lastContactAt, err := utils.ParseDate(value)
+			if err != nil {
+				return nil, fmt.Errorf("erro ao converter data de último contato: %w", err)
+			}
+			args = append(args, lastContactAt)
+		case "interesses", "perfil", "eventos", "tags":
+			baseQuery += fmt.Sprintf(" AND tags::text ILIKE $%d", filterIndex)
+			args = append(args, "%"+value+"%")
+		}
+		filterIndex++
+	}
+
+	// Contar total de registros antes da paginação
+	countQuery := "SELECT COUNT(*) FROM (" + baseQuery + ") AS total"
+	var totalRecords int
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalRecords); err != nil {
+		r.log.Error("Erro ao contar contatos disponíveis",
+			slog.String("account_id", accountID.String()),
+			slog.String("campaign_id", campaignID.String()),
+			slog.String("error", err.Error()))
+		return nil, fmt.Errorf("erro ao contar contatos disponíveis: %w", err)
+	}
+
+	// Calcular total de páginas
+	totalPages := int(math.Ceil(float64(totalRecords) / float64(perPage)))
+
+	// Aplicar ordenação
+	if sort != "" {
+		baseQuery += fmt.Sprintf(" ORDER BY %s", sort)
+	} else {
+		baseQuery += " ORDER BY updated_at DESC"
+	}
+
+	r.log.Debug("Query de busca de contatos disponíveis",
+		slog.String("query", baseQuery))
+
+	// Aplicar paginação
+	offset := (currentPage - 1) * perPage
+	baseQuery += fmt.Sprintf(" LIMIT %d OFFSET %d", perPage, offset)
+
+	// Executar query de busca
+	rows, err := r.db.QueryContext(ctx, baseQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao buscar contatos disponíveis: %w", err)
+	}
+	defer rows.Close()
+
+	// Preencher os resultados
+	var contacts []models.Contact
+	for rows.Next() {
+		var contact models.Contact
+		var tagsJSON []byte
+
+		if err := rows.Scan(
+			&contact.ID, &contact.Name, &contact.Email, &contact.WhatsApp, &contact.Gender,
+			&contact.BirthDate, &contact.Bairro, &contact.Cidade, &contact.Estado, &tagsJSON,
+			&contact.LastContactAt, &contact.CreatedAt, &contact.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("erro ao escanear contatos disponíveis: %w", err)
+		}
+
+		// Decodificar JSONB para Tags
+		_ = json.Unmarshal(tagsJSON, &contact.Tags)
+
+		contacts = append(contacts, contact)
+	}
+
+	// Retornar página de resultados
+	return &models.Paginator{
+		TotalRecords: totalRecords,
+		TotalPages:   totalPages,
+		CurrentPage:  currentPage,
+		PerPage:      perPage,
+		Data:         contacts,
+	}, nil
 }

@@ -17,6 +17,13 @@ func RegisterCampaignAudienceRoutes(mux *http.ServeMux, authMiddleware func(http
 	// 📌 Adicionar contatos a uma campanha
 	mux.Handle("POST /campaigns/{campaign_id}/audience", authMiddleware(handler.AddContactsToCampaignHandler()))
 
+	// 📌 Obter contatos disponíveis para uma campanha
+	mux.Handle("GET /campaigns/{campaign_id}/available-contacts", authMiddleware(handler.GetAvailableContactsHandler()))
+
 	// 📌 Obter audiência de uma campanha
-	mux.Handle("GET /campaigns/{campaign_id}/audience", authMiddleware(handler.GetCampaignAudienceHandler()))
+	mux.Handle("GET /campaigns/{campaign_id}/audience", authMiddleware(handler.GetPaginatedCampaignAudienceHandler()))
+
+	// 📌 Delete audiência de uma campanha
+	mux.Handle("DELETE /campaigns/{campaign_id}/audience/{audience_id}", authMiddleware(handler.RemoveContactFromCampaignHandler()))
+
 }

@@ -17,8 +17,11 @@ import (
 )
 
 type CampaignAudienceHandle interface {
+	GetAvailableContactsHandler() http.HandlerFunc
+	GetPaginatedCampaignAudienceHandler() http.HandlerFunc
 	AddContactsToCampaignHandler() http.HandlerFunc
 	GetCampaignAudienceHandler() http.HandlerFunc
+	RemoveContactFromCampaignHandler() http.HandlerFunc
 }
 
 type campaignAudienceHandle struct {
@@ -41,11 +44,44 @@ func NewCampaignAudienceHandle(
 	}
 }
 
+// ✅ **Obter contatos disponíveis para uma campanha**
+func (h *campaignAudienceHandle) GetAvailableContactsHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 🔍 Buscar conta autenticada
+		authAccount := r.Context().Value(middleware.AuthAccountKey).(*models.Account)
+
+		// 🔍 Buscar ID da campanha
+		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
+
+		// Validar se a campanha pertence ao usuário autenticado
+		h.validateOwnerCampaign(r, w, campaignID)
+
+		// 🔍 Capturar filtros da query string
+		filters := utils.ExtractQueryFilters(r.URL.Query(), []string{"name", "email", "whatsapp", "cidade", "estado", "tags"})
+		page, perPage, sort := utils.ExtractPaginationParams(r)
+
+		// 🔍 Buscar contatos disponíveis para a campanha
+		paginator, err := h.contactRepo.GetAvailableContactsForCampaign(r.Context(), authAccount.ID, campaignID, filters, sort, page, perPage)
+		if err != nil {
+			h.log.Error("Erro ao buscar contatos disponíveis", "error", err)
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar contatos disponíveis")
+			return
+		}
+
+		// ✅ Responder com JSON
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(paginator)
+	}
+}
+
 // ✅ **Adicionar contatos a uma campanha**
 func (h *campaignAudienceHandle) AddContactsToCampaignHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
 		authAccount := r.Context().Value(middleware.AuthAccountKey).(*models.Account)
+
+		// 🔍 Buscar ID da campanha
+		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
 
 		var requestDTO dto.CampaignAudienceCreateDTO
 
@@ -63,9 +99,6 @@ func (h *campaignAudienceHandle) AddContactsToCampaignHandler() http.HandlerFunc
 			utils.SendError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-
-		// 🔍 Buscar ID da campanha
-		campaignID := h.getCampaignIDFromRequest(r, w)
 
 		// 🔍 Buscar contatos e garantir que pertencem ao usuário autenticado
 		var validContacts []models.Contact
@@ -127,11 +160,44 @@ func (h *campaignAudienceHandle) AddContactsToCampaignHandler() http.HandlerFunc
 	}
 }
 
+// ✅ **Obter audiência da campanha com paginação**
+func (h *campaignAudienceHandle) GetPaginatedCampaignAudienceHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 🔍 Buscar ID da campanha
+		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
+
+		h.validateOwnerCampaign(r, w, campaignID)
+
+		// 🔍 Capturar parâmetros de paginação
+		page, perPage, _ := utils.ExtractPaginationParams(r)
+
+		// 🔍 Capturar filtro opcional `type`
+		var contactType *string
+		if typeParam := r.URL.Query().Get("type"); typeParam != "" {
+			contactType = &typeParam
+		}
+
+		// 🔍 Buscar audiência paginada
+		paginator, err := h.audienceRepo.GetPaginatedCampaignAudience(r.Context(), campaignID, contactType, page, perPage)
+		if err != nil {
+			h.log.Error("Erro ao buscar audiência paginada", "error", err)
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar audiência da campanha")
+			return
+		}
+
+		// ✅ Responder com JSON
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(paginator)
+	}
+}
+
 // ✅ **Obter audiência de uma campanha**
 func (h *campaignAudienceHandle) GetCampaignAudienceHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar ID da campanha
-		campaignID := h.getCampaignIDFromRequest(r, w)
+		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
+
+		h.validateOwnerCampaign(r, w, campaignID)
 
 		// 🔍 Buscar contatos da audiência da campanha
 		var audienceType *string
@@ -143,22 +209,41 @@ func (h *campaignAudienceHandle) GetCampaignAudienceHandler() http.HandlerFunc {
 		}
 
 		h.log.Info("Audiência recuperada com sucesso", "campaign_id", campaignID, "total", len(audience))
-		w.WriteHeader(http.StatusOK)
+		// Responder com JSON
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(audience)
 	}
 }
 
-func (h *campaignAudienceHandle) getCampaignIDFromRequest(r *http.Request, w http.ResponseWriter) uuid.UUID {
+// ✅ **Remover contato de uma campanha**
+func (h *campaignAudienceHandle) RemoveContactFromCampaignHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 🔍 Buscar ID da campanha
+		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
+
+		h.validateOwnerCampaign(r, w, campaignID)
+
+		// 🔍 Buscar ID do contato
+		audienceID := utils.GetUUIDFromRequestPath(r, w, "audience_id")
+		if audienceID == uuid.Nil {
+			return
+		}
+
+		// 🚀 Remover contato da campanha
+		if err := h.audienceRepo.RemoveContactFromCampaign(r.Context(), campaignID, audienceID); err != nil {
+			h.log.Error("Erro ao remover contato da campanha", "campaign_id", campaignID, "contact_id", audienceID, "error", err)
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao remover contato da campanha")
+			return
+		}
+
+		h.log.Info("Contato removido da campanha com sucesso", "campaign_id", campaignID, "contact_id", audienceID)
+		utils.SendSuccess(w, http.StatusNoContent, nil)
+	}
+}
+
+func (h *campaignAudienceHandle) validateOwnerCampaign(r *http.Request, w http.ResponseWriter, campaignID uuid.UUID) {
 	// 🔍 Buscar conta autenticada
 	authAccount := r.Context().Value(middleware.AuthAccountKey).(*models.Account)
-
-	// 🔍 Capturar `campaign_id` da URL
-	campaignIDParam := r.PathValue("campaign_id")
-	campaignID, err := uuid.Parse(campaignIDParam)
-	if err != nil {
-		h.log.Warn("ID inválido informado", "campaign_id", campaignIDParam)
-		utils.SendError(w, http.StatusBadRequest, "ID inválido")
-	}
 
 	// 🔍 Buscar a campanha para garantir que pertence à conta autenticada
 	campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
@@ -166,10 +251,10 @@ func (h *campaignAudienceHandle) getCampaignIDFromRequest(r *http.Request, w htt
 		h.log.Warn("Campanha não encontrada", "campaign_id", campaignID)
 		utils.SendError(w, http.StatusNotFound, "Campanha não encontrada")
 	}
+
+	// 🔍 Garantir que a campanha pertence à conta autenticada
 	if campaign.AccountID != authAccount.ID {
 		h.log.Warn("Usuário tentou acessar audiência de campanha de outra conta", "user_id", authAccount.ID, "campaign_id", campaign.ID)
 		utils.SendError(w, http.StatusForbidden, "Acesso negado")
 	}
-
-	return campaignID
 }

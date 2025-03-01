@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
@@ -117,8 +118,8 @@ func (r *campaignAudienceRepo) GetCampaignAudience(ctx context.Context, campaign
 }
 
 // Remove um contato da audiência
-func (r *campaignAudienceRepo) RemoveContactFromCampaign(ctx context.Context, campaignID, contactID uuid.UUID) error {
-	_, err := r.db.Exec(`DELETE FROM campaigns_audience WHERE campaign_id = $1 AND contact_id = $2`, campaignID, contactID)
+func (r *campaignAudienceRepo) RemoveContactFromCampaign(ctx context.Context, campaignID, audienceID uuid.UUID) error {
+	_, err := r.db.Exec(`DELETE FROM campaigns_audience WHERE campaign_id = $1 AND id = $2`, campaignID, audienceID)
 	return err
 }
 
@@ -201,4 +202,97 @@ func (r *campaignAudienceRepo) GetCampaignAudienceToSQS(ctx context.Context, acc
 	)
 
 	return messages, nil
+}
+
+// GetPaginatedCampaignAudience retorna a audiência de uma campanha com paginação
+func (r *campaignAudienceRepo) GetPaginatedCampaignAudience(
+	ctx context.Context,
+	campaignID uuid.UUID,
+	contactType *string,
+	currentPage int,
+	perPage int,
+) (*models.Paginator, error) {
+	// Garantir valores mínimos para paginação
+	if currentPage < 1 {
+		currentPage = 1
+	}
+	if perPage < 1 {
+		perPage = 10
+	}
+
+	// Query base
+	baseQuery := `
+		SELECT ca.id, ca.campaign_id, ca.contact_id, ca.type, ca.status,
+		       c.name, c.email, c.whatsapp, c.gender, c.birth_date, 
+		       c.bairro, c.cidade, c.estado, c.tags, c.history, 
+		       c.opt_out_at, c.last_contact_at, c.created_at, c.updated_at
+		FROM campaigns_audience ca
+		INNER JOIN contacts c ON ca.contact_id = c.id
+		WHERE ca.campaign_id = $1
+	`
+
+	args := []interface{}{campaignID}
+	filterIndex := 2
+
+	if contactType != nil {
+		baseQuery += " AND ca.type = $2"
+		args = append(args, *contactType)
+		filterIndex++
+	}
+
+	// Contar total de registros antes da paginação
+	countQuery := "SELECT COUNT(*) FROM (" + baseQuery + ") AS total"
+	var totalRecords int
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalRecords); err != nil {
+		return nil, fmt.Errorf("erro ao contar audiência da campanha: %w", err)
+	}
+
+	// Calcular total de páginas
+	totalPages := int(math.Ceil(float64(totalRecords) / float64(perPage)))
+
+	// Aplicar ordenação
+	baseQuery += " ORDER BY c.updated_at DESC"
+
+	// Aplicar paginação
+	offset := (currentPage - 1) * perPage
+	baseQuery += fmt.Sprintf(" LIMIT %d OFFSET %d", perPage, offset)
+
+	// Executar query de busca
+	rows, err := r.db.QueryContext(ctx, baseQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao buscar audiência da campanha: %w", err)
+	}
+	defer rows.Close()
+
+	// Preencher os resultados
+	var audience []dto.CampaignAudienceDTO
+	for rows.Next() {
+		var msg dto.CampaignAudienceDTO
+		var tagsJSON []byte
+
+		if err := rows.Scan(
+			&msg.ID, &msg.CampaignID, &msg.ContactID, &msg.Type, &msg.Status,
+			&msg.Name, &msg.Email, &msg.WhatsApp, &msg.Gender, &msg.BirthDate,
+			&msg.Bairro, &msg.Cidade, &msg.Estado, &tagsJSON, &msg.History,
+			&msg.OptOutAt, &msg.LastContactAt, &msg.CreatedAt, &msg.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("erro ao escanear audiência da campanha: %w", err)
+		}
+
+		// Converter JSONB das tags para map[string]interface{}
+		if err := json.Unmarshal(tagsJSON, &msg.Tags); err != nil {
+			msg.Tags = make(map[string]interface{}) // Se der erro, inicializa vazio
+		}
+
+		audience = append(audience, msg)
+	}
+
+	// Retornar página de resultados
+	return &models.Paginator{
+		TotalRecords: totalRecords,
+		TotalPages:   totalPages,
+		CurrentPage:  currentPage,
+		PerPage:      perPage,
+		Data:         audience,
+	}, nil
 }
