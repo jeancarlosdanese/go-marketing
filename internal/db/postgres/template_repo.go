@@ -29,16 +29,16 @@ func NewTemplateRepository(db *sql.DB) db.TemplateRepository {
 
 // Create insere um novo template no banco de dados.
 func (r *templateRepository) Create(ctx context.Context, template *models.Template) (*models.Template, error) {
-	r.log.Debug("Criando novo template", "name", template.Name)
+	r.log.Debug("Criando novo template", "template", template)
 	query := `
 		INSERT INTO templates (
-			account_id, name, description, created_at, updated_at
-		) VALUES ($1, $2, $3, NOW(), NOW())
+			account_id, name, description, channel
+		) VALUES ($1, $2, $3, $4)
 		RETURNING id, created_at, updated_at
 	`
 	err := r.db.QueryRow(
 		query,
-		template.AccountID, template.Name, template.Description,
+		template.AccountID, template.Name, template.Description, template.Channel,
 	).Scan(&template.ID, &template.CreatedAt, &template.UpdatedAt)
 
 	if err != nil {
@@ -55,12 +55,13 @@ func (r *templateRepository) GetByID(ctx context.Context, templateID uuid.UUID) 
 	r.log.Debug("Buscando template por ID", "id", templateID)
 
 	query := `
-		SELECT id, account_id, name, description, created_at, updated_at
+		SELECT id, account_id, name, description, channel, created_at, updated_at
 		FROM templates WHERE id = $1
 	`
 	template := &models.Template{}
 	err := r.db.QueryRow(query, templateID).Scan(
-		&template.ID, &template.AccountID, &template.Name, &template.Description, &template.CreatedAt, &template.UpdatedAt,
+		&template.ID, &template.AccountID, &template.Name, &template.Description,
+		&template.Channel, &template.CreatedAt, &template.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

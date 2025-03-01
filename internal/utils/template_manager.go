@@ -26,6 +26,15 @@ func GetTemplatePath(templateID, templateType string) string {
 	return filepath.Join(basePath, templateType, fmt.Sprintf("%s.%s", templateID, ext))
 }
 
+// ExistsTemplate verifica se um template existe no disco
+func ExistsTemplate(templateID, templateType string) bool {
+	path := GetTemplatePath(templateID, templateType)
+	if _, err := os.Stat(path); err != nil {
+		return !os.IsNotExist(err)
+	}
+	return true
+}
+
 // SaveTemplate salva o template localmente e faz backup no S3
 func SaveTemplate(templateID, templateType string, content []byte) error {
 	path := GetTemplatePath(templateID, templateType)

@@ -66,6 +66,7 @@ func (h *templateHandle) CreateTemplateHandler() http.HandlerFunc {
 			AccountID:   authAccount.ID,
 			Name:        templateDTO.Name,
 			Description: templateDTO.Description,
+			Channel:     templateDTO.Channel,
 		}
 
 		createdTemplate, err := h.templateRepo.Create(r.Context(), template)
@@ -122,16 +123,11 @@ func (h *templateHandle) GetTemplateHandler() http.HandlerFunc {
 		// 🔍 Buscar conta autenticada
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
-		templateID := r.PathValue("id")
-		id, err := uuid.Parse(templateID)
-		if err != nil {
-			h.log.Warn("ID inválido", "id", templateID)
-			utils.SendError(w, http.StatusBadRequest, "ID inválido")
-			return
-		}
+		// 🔍 Buscar ID da campanha
+		templateID := utils.GetUUIDFromRequestPath(r, w, "id")
 
 		// 🔍 Buscar template no banco
-		template, err := h.templateRepo.GetByID(r.Context(), id)
+		template, err := h.templateRepo.GetByID(r.Context(), templateID)
 		if err != nil {
 			h.log.Error("Erro ao buscar template", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar template")
@@ -142,7 +138,7 @@ func (h *templateHandle) GetTemplateHandler() http.HandlerFunc {
 			return
 		}
 
-		h.log.Info("Template recuperado com sucesso", "id", templateID)
+		h.log.Info("Template recuperado com sucesso", "id", templateID, "channel", template.Channel)
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(dto.NewTemplateResponseDTO(template))
 	}
@@ -214,13 +210,8 @@ func (h *templateHandle) DeleteTemplateHandler() http.HandlerFunc {
 		// 🔍 Buscar conta autenticada
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
-		id := r.PathValue("id")
-		templateID, err := uuid.Parse(id)
-		if err != nil {
-			h.log.Warn("ID inválido", "id", templateID)
-			utils.SendError(w, http.StatusBadRequest, "ID inválido")
-			return
-		}
+		// 🔍 Buscar ID da campanha
+		templateID := utils.GetUUIDFromRequestPath(r, w, "id")
 
 		// 🔍 Buscar template no banco
 		existingTemplate, err := h.templateRepo.GetByID(r.Context(), templateID)
@@ -246,16 +237,11 @@ func (h *templateHandle) DeleteTemplateHandler() http.HandlerFunc {
 
 func (h *templateHandle) UploadTemplateFileHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+		// 🔍 Buscar ID da campanha
+		templateID := utils.GetUUIDFromRequestPath(r, w, "id")
 		templateType := r.PathValue("type") // "email" ou "whatsapp"
 
-		// Validar se o template existe
-		templateID, err := uuid.Parse(id)
-		if err != nil {
-			h.log.Warn("ID inválido", "id", templateID)
-			utils.SendError(w, http.StatusBadRequest, "ID inválido")
-			return
-		}
+		h.log.Debug("Upload de template", "id", templateID, "type", templateType)
 
 		// 🔍 Buscar conta autenticada
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)

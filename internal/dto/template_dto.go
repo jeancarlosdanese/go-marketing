@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
+	"github.com/jeancarlosdanese/go-marketing/internal/utils"
 )
 
 // TemplateCreateDTO define os dados necessários para criar um template
@@ -28,6 +29,7 @@ type TemplateResponseDTO struct {
 	Name        string             `json:"name"`
 	Description *string            `json:"description,omitempty"`
 	Channel     models.ChannelType `json:"channel"` // Usa o enum definido em `constants.go`
+	HasFile     bool               `json:"has_file"`
 	CreatedAt   string             `json:"created_at"`
 	UpdatedAt   string             `json:"updated_at"`
 }
@@ -39,6 +41,7 @@ func NewTemplateResponseDTO(template *models.Template) TemplateResponseDTO {
 		Name:        template.Name,
 		Description: template.Description,
 		Channel:     template.Channel,
+		HasFile:     utils.ExistsTemplate(template.ID.String(), string(template.Channel)),
 		CreatedAt:   template.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		UpdatedAt:   template.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	}
