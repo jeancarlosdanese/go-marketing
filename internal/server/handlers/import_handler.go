@@ -21,17 +21,18 @@ type ImportHandler interface {
 }
 
 type importHandler struct {
-	log                  *slog.Logger
-	contatctRepo         db.ContactRepository
+	log          *slog.Logger
+	contatctRepo db.ContactRepository
+
 	contactImportService service.ContactImportService
 }
 
 // NewImportHandler cria uma instância do ImportHandler
-func NewImportHandler(contatctRepo db.ContactRepository, openAIService service.OpenAIService) ImportHandler {
+func NewImportHandler(contatctRepo db.ContactRepository, contactImportService service.ContactImportService) ImportHandler {
 	return &importHandler{
 		log:                  logger.GetLogger(),
 		contatctRepo:         contatctRepo,
-		contactImportService: service.NewContactImportService(contatctRepo, openAIService),
+		contactImportService: contactImportService,
 	}
 }
 

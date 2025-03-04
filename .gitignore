@@ -62,4 +62,6 @@ main.exe
 
 internal_docs
 /internal_docs/
-./internal_docs/*
+./internal_docs/*tmp/
+
+tpm/

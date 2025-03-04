@@ -54,6 +54,7 @@ func main() {
 	campaignRepo := postgres.NewCampaignRepository(dbConn)
 	audienceRepo := postgres.NewCampaignAudienceRepository(dbConn)
 	campaignSettingsRepo := postgres.NewCampaignSettingsRepository(dbConn)
+	contactImportRepo := postgres.NewContactImportRepository(dbConn)
 
 	// Inicializar serviços
 	sqsService, _ := service.NewSQSService(os.Getenv("SQS_EMAIL_URL"), os.Getenv("SQS_WHATSAPP_URL"))
@@ -91,7 +92,7 @@ func main() {
 	router := middleware.CORSMiddleware(routes.NewRouter(
 		otpRepo, accountRepo, accountSettingsRepo, contactRepo,
 		templateRepo, campaignRepo, audienceRepo, campaignSettingsRepo,
-		openAIService, campaignProcessor,
+		openAIService, campaignProcessor, contactImportRepo,
 	))
 
 	mux.Handle("/", router)

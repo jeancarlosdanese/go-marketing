@@ -5,8 +5,8 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -43,7 +43,7 @@ func ApplyMigrations(db *sql.DB) error {
 	}
 
 	// Listar arquivos de migrations na pasta
-	files, err := ioutil.ReadDir(migrationsDir)
+	files, err := os.ReadDir(migrationsDir)
 	if err != nil {
 		return fmt.Errorf("erro ao listar arquivos de migrations: %v", err)
 	}
@@ -64,7 +64,7 @@ func ApplyMigrations(db *sql.DB) error {
 		}
 
 		filePath := filepath.Join(migrationsDir, migration)
-		content, err := ioutil.ReadFile(filePath)
+		content, err := os.ReadFile(filePath)
 		if err != nil {
 			return fmt.Errorf("erro ao ler migration %s: %v", migration, err)
 		}

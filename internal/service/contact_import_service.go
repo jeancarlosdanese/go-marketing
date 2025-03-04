@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,21 +25,24 @@ import (
 // ContactImportService define a interface do serviço de importação
 type ContactImportService interface {
 	ProcessCSVAndSaveDB(ctx context.Context, inputCSV io.Reader, accountID uuid.UUID, config *dto.ConfigImportContactDTO) (int, int, error)
+	GenerateImportConfig(ctx context.Context, headers []string, sampleRecords [][]string) (*models.ContactImportConfig, error)
 }
 
 // contactImportService implementação do serviço de importação de contatos
 type contactImportService struct {
-	log          *slog.Logger
-	contactRepo  db.ContactRepository
-	openAIClient OpenAIService
+	log               *slog.Logger
+	contactRepo       db.ContactRepository
+	contactImportRepo db.ContactImportRepository
+	openAIClient      OpenAIService
 }
 
 // NewContactImportService cria uma nova instância do serviço de importação
-func NewContactImportService(contactRepo db.ContactRepository, openAIClient OpenAIService) ContactImportService {
+func NewContactImportService(contactRepo db.ContactRepository, contactImportRepo db.ContactImportRepository, openAIClient OpenAIService) ContactImportService {
 	return &contactImportService{
-		log:          logger.GetLogger(),
-		contactRepo:  contactRepo,
-		openAIClient: openAIClient,
+		log:               logger.GetLogger(),
+		contactRepo:       contactRepo,
+		contactImportRepo: contactImportRepo,
+		openAIClient:      openAIClient,
 	}
 }
 
@@ -240,4 +244,121 @@ func (s *contactImportService) formatRecordWithAI(ctx context.Context, prompt st
 		slog.String("log_id", logID))
 
 	return &contactDTO, nil
+}
+
+func (s *contactImportService) GenerateImportConfig(ctx context.Context, headers []string, sampleRecords [][]string) (*models.ContactImportConfig, error) {
+	// 🔹 Criamos um JSON de exemplo com os primeiros registros do CSV
+	sampleData, _ := json.Marshal(sampleRecords[:3]) // Enviar 3 amostras para IA
+
+	// 🔹 Criamos um exemplo de saída esperada
+	expectedOutput := `
+	{
+		"about_data": {
+			"source": "todos_os_campos",
+			"rules": "Do que se trata a base de dados? Qual o contexto? Quais informações são relevantes?"
+		},
+		"name": {
+			"source": "nome",
+			"rules": "Utilizar o nome do contato"
+		},
+		"email": {
+			"source": "email",
+			"rules": "Utilizar o e-mail do contato"
+		},
+		"whatsapp": {
+			"source": "fone_celular",
+			"rules": "Se fone_celular não existir, verificar fone_residencial"
+		},
+		"gender": {
+			"source": "nome",
+			"rules": "Definir gênero pelo nome, se não for possível deixar vazio."
+		},
+		"birth_date": {
+			"source": "data_nascimento",
+			"rules": "Formatar para YYYY-MM-DD"
+		},
+		"bairro": {
+			"source": "bairro",
+			"rules": ""
+		},
+		"cidade": {
+			"source": "cidade",
+			"rules": ""
+		},
+		"estado": {
+			"source": "uf",
+			"rules": ""
+		},
+		"eventos": {
+			"source": "cursos",
+			"rules": "Associar cursos concluídos aos eventos relevantes"
+		},
+		"interesses": {
+			"source": "cursos",
+			"rules": "Relacionar cursos a interesses em áreas específicas. Possíveis categorias: marketing_vendas, tecnologia_da_informacao, design_multimidia, tecnicas_profissionais_manutencao, saude_bem_estar, idiomas, negocios_gestao_financas, desenvolvimento_pessoal_profissional, artesanato_moda, beleza_estetica, gastronomia_culinaria"
+		},
+		"perfil": {
+			"source": "profissao,local_trabalho",
+			"rules": "Categorizar perfil com base nas informações de profissão e local de trabalho. Possíveis categorias: industria, producao, construcao_civil, manutencao, logistica, comercial, tecnologia, saude_bem_estar, educacao, financas, gestao, marketing, seguranca, engenharia, juridico, agronegocio, meio_ambiente"
+		},
+		"history": {
+			"source": "todos_os_campos",
+			"rules": "Criar um breve histórico do aluno com base nas informações disponíveis. Máximo de 500 caracteres. Regras: 1. O nome do aluno deve estar capitalizado corretamente, no formato 'João da Silva'. 2. Datas devem ser formatadas como 'DD/MM/YYYY'. 3. O texto deve relatar apenas fatos de forma natural e profissional, evitando repetições desnecessárias."
+		},
+		"last_contact_at": {
+			"source": "cursos",
+			"rules": "Utilizar última data de conclusão de cursos. Formato: YYYY-MM-DD"
+		}
+	}
+	`
+
+	// 🔹 Criamos o prompt para IA
+	prompt := fmt.Sprintf(`
+		Estamos processando um CSV para importar contatos em um sistema CRM. Aqui estão os cabeçalhos do CSV:
+		%s
+
+		Abaixo estão algumas amostras dos dados reais do CSV:
+		%s
+
+		Queremos mapear esses dados para um sistema de CRM. 
+		O resultado deve seguir o modelo JSON abaixo, onde "source" indica a coluna original e "rules" define regras adicionais:
+		%s
+
+		Por favor, retorne um JSON estruturado no mesmo formato.
+	`, strings.Join(headers, ", "), sampleData, expectedOutput)
+
+	// 🔹 Criamos um novo contexto com timeout de 60 segundos
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel() // Garante que o contexto será cancelado ao final da execução
+
+	request := ChatCompletionRequest{
+		Model: "gpt-4o",
+		Messages: []ChatMessage{
+			{Role: "system", Content: "Você é um assistente especializado em análise de dados para CRM. Você retorna exclusivamente JSON puro, sem marcações de código, sem comentários e sem texto adicional. Apenas retorne um objeto JSON válido."},
+			{Role: "user", Content: prompt},
+		},
+		Temperature: 0.4,
+	}
+
+	aiResponse, err := s.openAIClient.CreateChatCompletion(ctxWithTimeout, request)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao chamar OpenAI: %w", err)
+	}
+
+	if len(aiResponse.Choices) == 0 {
+		return nil, fmt.Errorf("nenhuma resposta válida da OpenAI")
+	}
+
+	// Extrai o JSON da resposta
+	cleanJSON := utils.SanitizeJSONResponse(aiResponse.Choices[0].Message.Content)
+
+	var config models.ContactImportConfig
+	if err := json.Unmarshal([]byte(cleanJSON), &config); err != nil {
+		return nil, fmt.Errorf("erro ao converter JSON para DTO: %w", err)
+	}
+
+	s.log.Debug("Configuração de importação gerada pela OpenAI",
+		slog.String("json", cleanJSON))
+
+	return &config, nil
 }

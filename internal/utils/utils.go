@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -93,4 +96,58 @@ func ExtractPaginationParams(r *http.Request) (int, int, string) {
 	}
 
 	return page, perPage, sort
+}
+
+// FileNameNormalize normaliza o nome do arquivo
+func FileNameNormalize(originalName string) string {
+	// 🔹 Remove a extensão para processar apenas o nome
+	nameWithoutExt := strings.TrimSuffix(originalName, ".csv")
+
+	// 🔹 Converte para minúsculas
+	normalized := strings.ToLower(nameWithoutExt)
+
+	// 🔹 Remove acentos e normaliza caracteres
+	normalized = removeAccents(normalized)
+
+	// 🔹 Substitui espaços por "_"
+	normalized = strings.ReplaceAll(normalized, " ", "_")
+
+	// 🔹 Remove caracteres inválidos, mantendo apenas letras, números, `_`, `-`
+	reg := regexp.MustCompile(`[^a-z0-9_-]`)
+	normalized = reg.ReplaceAllString(normalized, "")
+
+	// 🔹 Remove múltiplos `_` ou `-` consecutivos
+	normalized = regexp.MustCompile(`[_-]+`).ReplaceAllString(normalized, "_")
+
+	// 🔹 Garante que o nome não fique muito curto
+	if utf8.RuneCountInString(normalized) < 3 {
+		normalized = "arquivo"
+	}
+
+	// 🔹 Adiciona timestamp e extensão `.csv`
+	timestamp := time.Now().Unix()
+	return fmt.Sprintf("%s_%d.csv", normalized, timestamp)
+}
+
+// removeAccents remove acentos mantendo as letras originais
+func removeAccents(input string) string {
+	accents := map[rune]rune{
+		'á': 'a', 'ã': 'a', 'â': 'a', 'à': 'a', 'ä': 'a',
+		'é': 'e', 'ê': 'e', 'è': 'e', 'ë': 'e',
+		'í': 'i', 'î': 'i', 'ì': 'i', 'ï': 'i',
+		'ó': 'o', 'õ': 'o', 'ô': 'o', 'ò': 'o', 'ö': 'o',
+		'ú': 'u', 'û': 'u', 'ù': 'u', 'ü': 'u',
+		'ç': 'c',
+		'ñ': 'n',
+	}
+
+	var output strings.Builder
+	for _, r := range input {
+		if newR, found := accents[r]; found {
+			output.WriteRune(newR)
+		} else if unicode.IsLetter(r) || unicode.IsNumber(r) || r == ' ' || r == '-' || r == '_' {
+			output.WriteRune(r)
+		}
+	}
+	return output.String()
 }
