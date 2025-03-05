@@ -122,9 +122,46 @@ func (r *campaignAudienceRepo) AddAllFilteredContacts(ctx context.Context, accou
 					return fmt.Errorf("erro ao converter data: %w", err)
 				}
 				args = append(args, dateValue)
-			case "interesses", "perfil", "eventos", "tags":
-				selectQuery += fmt.Sprintf(" AND tags::jsonb @> $%d", filterIndex)
-				args = append(args, value)
+			case "tags":
+				// Filtra globalmente dentro do JSONB como um texto simples
+				tags := strings.Split(value, ",")
+				var conditions []string
+
+				for _, tag := range tags {
+					tag = strings.TrimSpace(tag)
+					if tag == "" {
+						continue
+					}
+					conditions = append(conditions, fmt.Sprintf("tags::TEXT ILIKE $%d", filterIndex))
+					args = append(args, "%"+tag+"%")
+					filterIndex++
+				}
+
+				if len(conditions) > 0 {
+					selectQuery += " AND (" + strings.Join(conditions, " OR ") + ")"
+				}
+			case "interesses", "perfil", "eventos":
+				// Filtra dentro de uma subcategoria específica do JSONB
+				tags := strings.Split(value, ",")
+				var conditions []string
+
+				for _, tag := range tags {
+					tag = strings.TrimSpace(tag)
+					if tag == "" {
+						continue
+					}
+					conditions = append(conditions, fmt.Sprintf(
+						"EXISTS (SELECT 1 FROM jsonb_array_elements_text(tags->'%s') AS t WHERE LOWER(t) ILIKE $%d)",
+						key, filterIndex,
+					))
+					args = append(args, "%"+strings.ToLower(tag)+"%")
+					filterIndex++
+				}
+
+				if len(conditions) > 0 {
+					selectQuery += " AND (" + strings.Join(conditions, " OR ") + ")"
+				}
+
 			}
 			filterIndex++
 		}

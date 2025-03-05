@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
@@ -480,9 +481,46 @@ func (r *contactRepo) GetAvailableContactsForCampaign(
 				return nil, fmt.Errorf("erro ao converter data de último contato: %w", err)
 			}
 			args = append(args, lastContactAt)
-		case "interesses", "perfil", "eventos", "tags":
-			baseQuery += fmt.Sprintf(" AND tags::text ILIKE $%d", filterIndex)
-			args = append(args, "%"+value+"%")
+		case "tags":
+			// Filtra globalmente dentro do JSONB como um texto simples
+			tags := strings.Split(value, ",")
+			var conditions []string
+
+			for _, tag := range tags {
+				tag = strings.TrimSpace(tag)
+				if tag == "" {
+					continue
+				}
+				conditions = append(conditions, fmt.Sprintf("tags::TEXT ILIKE $%d", filterIndex))
+				args = append(args, "%"+tag+"%")
+				filterIndex++
+			}
+
+			if len(conditions) > 0 {
+				baseQuery += " AND (" + strings.Join(conditions, " OR ") + ")"
+			}
+		case "interesses", "perfil", "eventos":
+			// Filtra dentro de uma subcategoria específica do JSONB
+			tags := strings.Split(value, ",")
+			var conditions []string
+
+			for _, tag := range tags {
+				tag = strings.TrimSpace(tag)
+				if tag == "" {
+					continue
+				}
+				conditions = append(conditions, fmt.Sprintf(
+					"EXISTS (SELECT 1 FROM jsonb_array_elements_text(tags->'%s') AS t WHERE LOWER(t) ILIKE $%d)",
+					key, filterIndex,
+				))
+				args = append(args, "%"+strings.ToLower(tag)+"%")
+				filterIndex++
+			}
+
+			if len(conditions) > 0 {
+				baseQuery += " AND (" + strings.Join(conditions, " OR ") + ")"
+			}
+
 		}
 		filterIndex++
 	}
