@@ -112,9 +112,6 @@ func (h *authHandle) MeHandler() http.HandlerFunc {
 
 		h.log.Info("✅ Dados do usuário retornados", "email", account.Email, "name", account.Name)
 
-		json.NewEncoder(w).Encode(map[string]string{
-			"email": account.Email,
-			"name":  account.Name,
-		})
+		json.NewEncoder(w).Encode(account)
 	}
 }
