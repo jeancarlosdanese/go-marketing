@@ -14,4 +14,7 @@ type AccountOTPRepository interface {
 	CleanExpiredOTPs(ctx context.Context) error
 	FindByEmailOrWhatsApp(ctx context.Context, identifier string) (*models.Account, error)
 	StoreOTP(ctx context.Context, accountID string, otp string) error
+	GetOTPAttempts(ctx context.Context, identifier string) (int, error)
+	IncrementOTPAttempts(ctx context.Context, identifier string) error
+	ResetOTPAttempts(ctx context.Context, identifier string) error
 }

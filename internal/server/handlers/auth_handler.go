@@ -29,17 +29,27 @@ func NewAuthHandle(repo db.AccountOTPRepository) AuthHandle {
 	return &authHandle{log: log, repo: repo}
 }
 
-// 🔐 Solicita autenticação (envia OTP)
+// 🔐 Solicita autenticação (envia OTP) com validação do Turnstile
+// 🔐 Solicita autenticação (envia OTP) com validação do reCAPTCHA
 func (h *authHandle) RequestAuthHandle() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.log.Info("📩 Recebida solicitação de autenticação")
 
 		var req struct {
-			Identifier string `json:"identifier"`
+			Identifier     string `json:"identifier"`
+			RecaptchaToken string `json:"recaptchaToken"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			h.log.Warn("⚠️ Erro ao processar JSON", "error", err)
 			http.Error(w, "Erro ao processar JSON", http.StatusBadRequest)
+			return
+		}
+
+		// 🔹 Validar reCAPTCHA antes de continuar
+		isValid, err := auth.VerifyRecaptcha(req.RecaptchaToken)
+		if err != nil || !isValid {
+			h.log.Warn("⚠️ Falha na verificação do reCAPTCHA", "identifier", req.Identifier)
+			http.Error(w, "Falha na verificação do reCAPTCHA", http.StatusForbidden)
 			return
 		}
 
@@ -50,8 +60,14 @@ func (h *authHandle) RequestAuthHandle() http.HandlerFunc {
 			return
 		}
 
-		// Gerar e enviar OTP...
-		otp, _ := auth.GenerateOTP()
+		// 🔥 Gerar e enviar OTP...
+		otp, err := auth.GenerateOTP()
+		if err != nil {
+			h.log.Error("Erro ao gerar OTP", "error", err)
+			http.Error(w, "Erro interno ao gerar OTP", http.StatusInternalServerError)
+			return
+		}
+
 		h.repo.StoreOTP(r.Context(), account.ID.String(), otp)
 		auth.SendOTP(req.Identifier, otp)
 
@@ -77,16 +93,37 @@ func (h *authHandle) VerifyAuthHandle() http.HandlerFunc {
 			return
 		}
 
+		// 🔥 Checar se o usuário excedeu o número de tentativas permitidas
+		maxAttempts := 3
+		attempts, err := h.repo.GetOTPAttempts(r.Context(), req.Identifier)
+		if err != nil {
+			h.log.Error("Erro ao obter tentativas", "identifier", req.Identifier, "error", err)
+			http.Error(w, "Erro interno", http.StatusInternalServerError)
+			return
+		}
+
+		if attempts >= maxAttempts {
+			h.log.Warn("⚠️ Excedeu limite de tentativas", "identifier", req.Identifier)
+			http.Error(w, "Muitas tentativas. Aguarde um tempo antes de tentar novamente.", http.StatusTooManyRequests)
+			return
+		}
+
 		// 🔥 Limpar OTPs expirados antes de verificar
 		h.repo.CleanExpiredOTPs(r.Context())
 
 		// 🔥 Buscar OTP válido
 		accountID, err := h.repo.FindValidOTP(r.Context(), req.Identifier, req.OTP)
 		if err != nil {
+			// OTP inválido: incrementa tentativas
+			h.repo.IncrementOTPAttempts(r.Context(), req.Identifier)
+
 			h.log.Warn("⚠️ OTP inválido", "identifier", req.Identifier, "error", err)
 			http.Error(w, "OTP inválido ou expirado", http.StatusUnauthorized)
 			return
 		}
+
+		// ✅ Se chegou até aqui, OTP está correto; reseta tentativas
+		h.repo.ResetOTPAttempts(r.Context(), req.Identifier)
 
 		// 🔥 Gerar token JWT
 		token, _ := auth.GenerateJWT(accountID.String())

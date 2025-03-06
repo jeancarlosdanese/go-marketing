@@ -6,19 +6,22 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
+	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
 )
 
 type AccountOTPRepoPostgres struct {
-	db *sql.DB
+	log *slog.Logger
+	db  *sql.DB
 }
 
 func NewAccountOTPRepository(db *sql.DB) db.AccountOTPRepository {
-	return &AccountOTPRepoPostgres{db: db}
+	return &AccountOTPRepoPostgres{log: logger.GetLogger(), db: db}
 }
 
 // FindValidOTP busca um OTP válido para o identificador (e-mail ou WhatsApp)
@@ -76,5 +79,51 @@ func (r *AccountOTPRepoPostgres) StoreOTP(ctx context.Context, accountID string,
 
 	query := "INSERT INTO account_otps (account_id, otp_code, expires_at) VALUES ($1, $2, $3)"
 	_, err := r.db.Exec(query, accountID, otp, expiration)
+	return err
+}
+
+// GetOTPAttempts retorna o número de tentativas para um OTP específico
+func (r *AccountOTPRepoPostgres) GetOTPAttempts(ctx context.Context, identifier string) (int, error) {
+	var attempts int
+	query := `
+        SELECT attempts FROM account_otps
+        WHERE account_id = (SELECT id FROM accounts WHERE email = $1 OR whatsapp = $1)
+          AND expires_at > NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+    `
+	err := r.db.QueryRowContext(ctx, query, identifier).Scan(&attempts)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil // Se não encontrou, retorna 0 tentativas
+		}
+		return 0, err
+	}
+	return attempts, nil
+}
+
+// IncrementOTPAttempts adiciona 1 tentativa ao OTP mais recente
+func (r *AccountOTPRepoPostgres) IncrementOTPAttempts(ctx context.Context, identifier string) error {
+	r.log.Debug("Incrementando tentativas", "identifier", identifier)
+	query := `
+        UPDATE account_otps
+        SET attempts = attempts + 1
+        WHERE account_id = (SELECT id FROM accounts WHERE email = $1 OR whatsapp = $1)
+    `
+
+	r.log.Debug("Executando query", "query", query)
+
+	_, err := r.db.ExecContext(ctx, query, identifier)
+	return err
+}
+
+// ResetOTPAttempts reseta as tentativas após uma verificação bem-sucedida
+func (r *AccountOTPRepoPostgres) ResetOTPAttempts(ctx context.Context, identifier string) error {
+	query := `
+        UPDATE account_otps
+        SET attempts = 0
+        WHERE account_id = (SELECT id FROM accounts WHERE email = $1 OR whatsapp = $1)
+    `
+	_, err := r.db.ExecContext(ctx, query, identifier)
 	return err
 }
