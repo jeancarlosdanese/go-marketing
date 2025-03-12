@@ -4,6 +4,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -25,6 +26,7 @@ type CampaignHandle interface {
 	GetAllCampaignsHandler() http.HandlerFunc
 	UpdateCampaignHandler() http.HandlerFunc
 	UpdateCampaignStatusHandler() http.HandlerFunc
+	GetCampaignStatusHandler() http.HandlerFunc
 	DeleteCampaignHandler() http.HandlerFunc
 }
 
@@ -88,8 +90,8 @@ func (h *campaignHandle) CreateCampaignHandler() http.HandlerFunc {
 			Name:        campaignDTO.Name,
 			Description: campaignDTO.Description,
 			Channels:    campaignDTO.Channels,
-			Filters:     campaignDTO.Filters,
-			Status:      models.StatusPendente,
+			// Filters:     campaignDTO.Filters,
+			Status: models.StatusPendente,
 		}
 
 		createdCampaign, err := h.campaignRepo.Create(r.Context(), campaign)
@@ -161,7 +163,7 @@ func (h *campaignHandle) GetAllCampaignsHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Buscar campanhas com os filtros aplicados
-		campaigns, err := h.campaignRepo.GetAllByAccountID(r.Context(), authAccount.ID, filters)
+		campaigns, err := h.campaignRepo.GetAllByAccountID(r.Context(), authAccount.ID, &filters)
 		if err != nil {
 			h.log.Error("Erro ao buscar campanhas", "error", err)
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar campanhas")
@@ -253,8 +255,8 @@ func (h *campaignHandle) UpdateCampaignHandler() http.HandlerFunc {
 			}
 		}
 
-		// Atualizar filtros
-		campaign.Filters = updateDTO.Filters
+		// // Atualizar filtros
+		// campaign.Filters = updateDTO.Filters
 
 		// Atualizar campanha
 		if updateDTO.Name != nil {
@@ -327,7 +329,7 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 		}
 
 		// 🔍 Se for ativar a campanha, verificar se há contatos na audiência
-		if statusDTO.Status == "ativa" {
+		if statusDTO.Status == "processando" {
 			audience, err := h.audienceRepo.GetCampaignAudienceToSQS(r.Context(), authAccount.ID, campaignID, nil)
 			if err != nil {
 				h.log.Error("Erro ao buscar audiência", "campaign_id", campaignID, "error", err)
@@ -340,27 +342,44 @@ func (h *campaignHandle) UpdateCampaignStatusHandler() http.HandlerFunc {
 				return
 			}
 
-			// 🚀 Inicia o worker em background para enviar mensagens
+			// 🟡 Atualizar status da campanha para "processando"
+			campaign.Status = "processando" // 🟡 Define status intermediário
+			if err := h.campaignRepo.UpdateStatus(r.Context(), campaignID, "processando"); err != nil {
+				utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar status")
+				return
+			}
+
+			// 🚀 Iniciar worker para processar campanha
 			go func() {
 				h.log.Info("Iniciando worker de envio de mensagens", "campaign_id", campaignID)
-				if err := h.campaignProcessor.ProcessCampaign(r.Context(), campaign, audience); err != nil {
+				err := h.campaignProcessor.ProcessCampaign(r.Context(), campaign, audience)
+				if err != nil {
 					h.log.Error("Erro no processamento da campanha", "campaign_id", campaignID, "error", err)
+				} else {
+					// ✅ Atualiza para "ativa" após processar
+					h.campaignRepo.UpdateStatus(context.Background(), campaignID, "processando")
 				}
 			}()
 		}
 
-		// ✅ Atualizar status da campanha
-		campaign.Status = statusDTO.Status
-		if err := h.campaignRepo.UpdateStatus(r.Context(), campaignID, string(campaign.Status)); err != nil {
-			utils.SendError(w, http.StatusInternalServerError, "Erro ao atualizar status")
+		h.log.Info("Status da campanha atualizado com sucesso", "campaign_id", campaignID, "status", campaign.Status)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"status": string(campaign.Status)})
+	}
+}
+
+// GetCampaignStatusHandler retorna o status de uma campanha
+func (h *campaignHandle) GetCampaignStatusHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
+
+		campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
+		if err != nil || campaign == nil {
+			utils.SendError(w, http.StatusNotFound, "Campanha não encontrada")
 			return
 		}
 
-		updatedCampaign := dto.NewCampaignResponseDTO(campaign)
-
-		h.log.Info("Status da campanha atualizado com sucesso", "campaign_id", campaignID, "status", campaign.Status)
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(updatedCampaign)
+		json.NewEncoder(w).Encode(map[string]string{"status": string(campaign.Status)})
 	}
 }
 

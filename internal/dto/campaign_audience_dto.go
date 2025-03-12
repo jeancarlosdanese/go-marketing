@@ -51,7 +51,7 @@ type CampaignAudienceResponseDTO struct {
 	CampaignID string                  `json:"campaign_id"`
 	ContactID  string                  `json:"contact_id"`
 	Type       models.ChannelType      `json:"type"`
-	Status     models.CampaignStatus   `json:"status"`
+	Status     models.AudienceStatus   `json:"status"`
 	MessageID  *string                 `json:"message_id,omitempty"`
 	Feedback   *map[string]interface{} `json:"feedback_api,omitempty"`
 	CreatedAt  string                  `json:"created_at"`

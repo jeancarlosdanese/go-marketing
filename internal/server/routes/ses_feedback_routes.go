@@ -10,9 +10,9 @@ import (
 )
 
 // RegisterSESFeedBackRoutes adiciona as rotas relacionadas à audiência de campanhas
-func RegisterSESFeedBackRoutes(mux *http.ServeMux, audienceRepo db.CampaignAudienceRepository) {
+func RegisterSESFeedBackRoutes(mux *http.ServeMux, audienceRepo db.CampaignAudienceRepository, contactRepo db.ContactRepository) {
 
-	handler := handlers.NewSESFeedbackHandler(audienceRepo)
+	handler := handlers.NewSESFeedbackHandler(audienceRepo, contactRepo)
 
 	// 📌 Atualiza contactAudience
 	mux.Handle("POST /ses-feedback", handler.HandleSESFeedback())

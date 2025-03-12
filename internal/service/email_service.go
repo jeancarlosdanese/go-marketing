@@ -149,7 +149,7 @@ func (s *emailService) generateEmailPromptForAI(contact models.Contact, campaign
 		"Gênero":         contact.Gender,
 		"Histórico":      contact.History,
 		"Último Contato": contact.LastContactAt,
-		"Localização":    fmt.Sprintf("%s, %s - %s", *contact.Bairro, *contact.Cidade, *contact.Estado),
+		"Localização":    fmt.Sprintf("%s, %s - %s", utils.SafeString(contact.Bairro), utils.SafeString(contact.Cidade), utils.SafeString(contact.Estado)),
 		"Interesses":     contact.Tags,
 	}
 

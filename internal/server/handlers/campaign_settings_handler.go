@@ -26,13 +26,15 @@ type CampaignSettingsHandler interface {
 
 type campaignSettingsHandler struct {
 	log          *slog.Logger
+	campaignRepo db.CampaignRepository
 	settingsRepo db.CampaignSettingsRepository
 }
 
 // NewCampaignSettingsHandler cria um novo handler
-func NewCampaignSettingsHandler(settingsRepo db.CampaignSettingsRepository) CampaignSettingsHandler {
+func NewCampaignSettingsHandler(settingsRepo db.CampaignSettingsRepository, campaignRepo db.CampaignRepository) CampaignSettingsHandler {
 	return &campaignSettingsHandler{
 		log:          logger.GetLogger(),
+		campaignRepo: campaignRepo,
 		settingsRepo: settingsRepo,
 	}
 }
@@ -40,6 +42,9 @@ func NewCampaignSettingsHandler(settingsRepo db.CampaignSettingsRepository) Camp
 // ✅ Criar configurações de uma campanha
 func (h *campaignSettingsHandler) CreateSettingsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// 🔍 Buscar conta autenticada
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
+
 		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
 
 		var requestDTO dto.CampaignSettingsDTO
@@ -66,6 +71,20 @@ func (h *campaignSettingsHandler) CreateSettingsHandler() http.HandlerFunc {
 			return
 		}
 
+		campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
+		if err != nil {
+			h.log.Error("Erro ao buscar campanha", "error", err)
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar campanha")
+			return
+		}
+
+		// 🔍 Verificar se a campanha pertence à conta autenticada
+		if campaign == nil || campaign.AccountID != authAccount.ID {
+			h.log.Warn("Campanha não encontrada", "campaign_id", campaignID)
+			utils.SendError(w, http.StatusNotFound, "Campanha não encontrada")
+			return
+		}
+
 		// 🚀 Criar configurações
 		settings, err := h.settingsRepo.CreateSettings(r.Context(), requestDTO.ToModel())
 		if err != nil {
@@ -82,7 +101,23 @@ func (h *campaignSettingsHandler) CreateSettingsHandler() http.HandlerFunc {
 // ✅ Buscar configurações de uma campanha
 func (h *campaignSettingsHandler) GetSettingsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		authAccount := r.Context().Value(middleware.AuthAccountKey).(*models.Account)
+
 		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
+
+		campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
+		if err != nil {
+			h.log.Error("Erro ao buscar campanha", "error", err)
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao buscar campanha")
+			return
+		}
+
+		// 🔍 Verificar se a campanha pertence à conta autenticada
+		if campaign == nil || campaign.AccountID != authAccount.ID {
+			h.log.Warn("Campanha não encontrada", "campaign_id", campaignID)
+			utils.SendError(w, http.StatusNotFound, "Campanha não encontrada")
+			return
+		}
 
 		settings, err := h.settingsRepo.GetSettingsByCampaignID(r.Context(), campaignID)
 		if err != nil {
@@ -92,7 +127,7 @@ func (h *campaignSettingsHandler) GetSettingsHandler() http.HandlerFunc {
 		}
 
 		if settings == nil {
-			utils.SendError(w, http.StatusNotFound, "Nenhuma configuração encontrada")
+			utils.SendError(w, http.StatusNoContent, "Nenhuma configuração encontrada")
 			return
 		}
 

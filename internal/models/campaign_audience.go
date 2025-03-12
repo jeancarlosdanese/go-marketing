@@ -14,7 +14,7 @@ type CampaignAudience struct {
 	CampaignID uuid.UUID               `json:"campaign_id"`
 	ContactID  uuid.UUID               `json:"contact_id"`
 	Type       ChannelType             `json:"type"` // "email" ou "whatsapp"
-	Status     CampaignStatus          `json:"status"`
+	Status     AudienceStatus          `json:"status"`
 	MessageID  *string                 `json:"message_id,omitempty"`
 	Feedback   *map[string]interface{} `json:"feedback_api,omitempty"` // JSONB
 	CreatedAt  time.Time               `json:"created_at"`
@@ -27,6 +27,21 @@ func NewCampaignAudience(campaignID, contactID uuid.UUID, messageType ChannelTyp
 		CampaignID: campaignID,
 		ContactID:  contactID,
 		Type:       messageType,
-		Status:     StatusPendente,
+		Status:     AudiencePendente,
 	}
 }
+
+// 🔹 Enum para status de campanha
+type AudienceStatus string
+
+const (
+	AudiencePendente            AudienceStatus = "pendente"             // Estado inicial, não processado
+	AudienceFila                AudienceStatus = "fila"                 // Na fila de processamento
+	AudienceEnviado             AudienceStatus = "enviado"              // Mensagem enviada ou entregue
+	AudienceFalhaRenderizacao   AudienceStatus = "falha_renderizacao"   // Erro na renderização
+	AudienceRejeitado           AudienceStatus = "rejeitado"            // Rejeitado pelo SES
+	AudienceDevolvido           AudienceStatus = "devolvido"            // Bounce (devolvido)
+	AudienceReclamado           AudienceStatus = "reclamado"            // Complaint (reclamado)
+	AudienceAtrasado            AudienceStatus = "atrasado"             // DeliveryDelay (atrasado)
+	AudienceAtualizouAssinatura AudienceStatus = "atualizou_assinatura" // SubscriptionUpdate (atualização de assinatura)
+)

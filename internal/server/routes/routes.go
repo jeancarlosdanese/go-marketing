@@ -37,8 +37,8 @@ func NewRouter(
 	RegisterTemplateRoutes(mux, authMiddleware, templateRepo)
 	RegisterCampaignRoutes(mux, authMiddleware, campaignRepo, audienceRepo, campaignProcessor)
 	RegisterCampaignAudienceRoutes(mux, authMiddleware, campaignRepo, contactRepo, audienceRepo)
-	RegisterSESFeedBackRoutes(mux, audienceRepo)
-	RegisterCampaignSettingsRoutes(mux, authMiddleware, campaignSettingsRepo)
+	RegisterSESFeedBackRoutes(mux, audienceRepo, contactRepo)
+	RegisterCampaignSettingsRoutes(mux, authMiddleware, campaignRepo, campaignSettingsRepo)
 
 	// 🔥 Rota de Health Check
 	mux.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -13,9 +13,10 @@ import (
 func RegisterCampaignSettingsRoutes(
 	mux *http.ServeMux,
 	authMiddleware func(http.Handler) http.HandlerFunc,
+	campaignRepo db.CampaignRepository,
 	settingsRepo db.CampaignSettingsRepository,
 ) {
-	handler := handlers.NewCampaignSettingsHandler(settingsRepo)
+	handler := handlers.NewCampaignSettingsHandler(settingsRepo, campaignRepo)
 
 	// 📌 Criar configurações para uma campanha
 	mux.Handle("POST /campaigns/{campaign_id}/settings", authMiddleware(handler.CreateSettingsHandler()))

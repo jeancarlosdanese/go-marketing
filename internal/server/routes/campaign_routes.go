@@ -33,6 +33,9 @@ func RegisterCampaignRoutes(
 	// Atualizar uma campanha
 	mux.Handle("PUT /campaigns/{campaign_id}", authMiddleware(handler.UpdateCampaignHandler()))
 
+	// Consultar status de uma campanha
+	mux.Handle("GET /campaigns/{campaign_id}/status", authMiddleware(handler.GetCampaignStatusHandler()))
+
 	// Atualizar status da campanha
 	mux.Handle("PATCH /campaigns/{campaign_id}/status", authMiddleware(handler.UpdateCampaignStatusHandler()))
 

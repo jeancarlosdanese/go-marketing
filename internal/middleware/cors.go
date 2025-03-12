@@ -20,7 +20,7 @@ func CORSMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
 
 		// 🔥 Permitir métodos usados pelo frontend
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 
 		// 🔥 Permitir headers necessários
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")

@@ -51,9 +51,9 @@ func (c *CampaignUpdateDTO) Validate() error {
 		return errors.New("pelo menos um canal deve ser definido")
 	}
 	if c.Status != nil {
-		validStatuses := map[models.CampaignStatus]bool{models.StatusPendente: true, models.StatusAtiva: true, models.StatusConcluida: true}
+		validStatuses := map[models.CampaignStatus]bool{models.StatusPendente: true, models.StatusProcessando: true, models.StatusEnviando: true, models.StatusCancelada: true, models.StatusConcluida: true}
 		if !validStatuses[*c.Status] {
-			return errors.New("status inválido, deve ser 'pendente', 'ativa' ou 'concluida'")
+			return errors.New("status inválido, deve ser 'pendente', 'processando', 'enviando', 'cancelada' ou 'concluida'")
 		}
 	}
 	return nil
@@ -66,9 +66,9 @@ type CampaignUpdateStatusDTO struct {
 
 // Validate valida os dados do CampaignUpdateStatusDTO
 func (c *CampaignUpdateStatusDTO) Validate() error {
-	validStatuses := map[models.CampaignStatus]bool{models.StatusPendente: true, models.StatusAtiva: true, models.StatusConcluida: true}
+	validStatuses := map[models.CampaignStatus]bool{models.StatusPendente: true, models.StatusProcessando: true, models.StatusEnviando: true, models.StatusCancelada: true, models.StatusConcluida: true}
 	if !validStatuses[c.Status] {
-		return errors.New("status inválido, deve ser 'pendente', 'ativa' ou 'concluida'")
+		return errors.New("status inválido, deve ser 'pendente', 'processando', 'enviando', 'cancelada' ou 'concluida'")
 	}
 
 	return nil
@@ -76,15 +76,15 @@ func (c *CampaignUpdateStatusDTO) Validate() error {
 
 // CampaignResponseDTO estrutura a resposta para campanhas
 type CampaignResponseDTO struct {
-	ID          string                  `json:"id"`
-	AccountID   string                  `json:"account_id"`
-	Name        string                  `json:"name"`
-	Description *string                 `json:"description,omitempty"`
-	Channels    models.ChannelsConfig   `json:"channels"`
-	Filters     *models.AudienceFilters `json:"filters,omitempty"`
-	Status      models.CampaignStatus   `json:"status"`
-	CreatedAt   string                  `json:"created_at"`
-	UpdatedAt   string                  `json:"updated_at"`
+	ID          string                `json:"id"`
+	AccountID   string                `json:"account_id"`
+	Name        string                `json:"name"`
+	Description *string               `json:"description,omitempty"`
+	Channels    models.ChannelsConfig `json:"channels"`
+	// Filters     *models.AudienceFilters `json:"filters,omitempty"`
+	Status    models.CampaignStatus `json:"status"`
+	CreatedAt string                `json:"created_at"`
+	UpdatedAt string                `json:"updated_at"`
 }
 
 // NewCampaignResponseDTO converte um modelo `Campaign` para um DTO de resposta
@@ -95,9 +95,9 @@ func NewCampaignResponseDTO(campaign *models.Campaign) CampaignResponseDTO {
 		Name:        campaign.Name,
 		Description: campaign.Description,
 		Channels:    campaign.Channels,
-		Filters:     campaign.Filters,
-		Status:      campaign.Status,
-		CreatedAt:   campaign.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:   campaign.UpdatedAt.Format("2006-01-02 15:04:05"),
+		// Filters:     campaign.Filters,
+		Status:    campaign.Status,
+		CreatedAt: campaign.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt: campaign.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
 }

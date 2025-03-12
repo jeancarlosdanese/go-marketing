@@ -13,14 +13,16 @@ const (
 // Lista de canais permitidos
 var AllowedChannels = []ChannelType{EmailChannel, WhatsappChannel}
 
-// 🔹 Enum para status de campanha
+// 🔹 Enum para status da campanha
 type CampaignStatus string
 
 const (
-	StatusPendente  CampaignStatus = "pendente"
-	StatusAtiva     CampaignStatus = "ativa"
-	StatusConcluida CampaignStatus = "concluida"
+	StatusPendente    CampaignStatus = "pendente"    // Criada, aguardando ativação
+	StatusProcessando CampaignStatus = "processando" // Enfileirando mensagens no SQS
+	StatusEnviando    CampaignStatus = "enviando"    // Mensagens sendo enviadas
+	StatusConcluida   CampaignStatus = "concluida"   // Campanha finalizada
+	StatusCancelada   CampaignStatus = "cancelada"   // Cancelada pelo usuário
 )
 
 // Lista de status permitidos
-var AllowedCampaignStatus = []CampaignStatus{StatusPendente, StatusAtiva, StatusConcluida}
+var AllowedCampaignStatus = []CampaignStatus{StatusPendente, StatusProcessando, StatusEnviando, StatusConcluida, StatusCancelada}
