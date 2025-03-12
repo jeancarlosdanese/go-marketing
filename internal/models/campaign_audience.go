@@ -37,7 +37,9 @@ type AudienceStatus string
 const (
 	AudiencePendente            AudienceStatus = "pendente"             // Estado inicial, não processado
 	AudienceFila                AudienceStatus = "fila"                 // Na fila de processamento
+	AudienceFalhaEnvio          AudienceStatus = "falha_envio"          // Erro no envio
 	AudienceEnviado             AudienceStatus = "enviado"              // Mensagem enviada ou entregue
+	AudienceEntregue            AudienceStatus = "entregue"             // Mensagem entregue
 	AudienceFalhaRenderizacao   AudienceStatus = "falha_renderizacao"   // Erro na renderização
 	AudienceRejeitado           AudienceStatus = "rejeitado"            // Rejeitado pelo SES
 	AudienceDevolvido           AudienceStatus = "devolvido"            // Bounce (devolvido)
