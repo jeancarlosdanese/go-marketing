@@ -4,6 +4,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -24,6 +25,7 @@ type TemplateHandle interface {
 	UpdateTemplateHandler() http.HandlerFunc
 	DeleteTemplateHandler() http.HandlerFunc
 	UploadTemplateFileHandler() http.HandlerFunc
+	DownloadTemplateFileHandler() http.HandlerFunc
 }
 
 type templateHandle struct {
@@ -281,5 +283,52 @@ func (h *templateHandle) UploadTemplateFileHandler() http.HandlerFunc {
 
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"message": "Template salvo com sucesso"})
+	}
+
+}
+
+// DownloadTemplateFileHandler baixa um arquivo de template
+func (h *templateHandle) DownloadTemplateFileHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 🔍 Buscar ID da campanha
+		templateID := utils.GetUUIDFromRequestPath(r, w, "id")
+
+		h.log.Debug("Download de template", "id", templateID)
+
+		// 🔍 Buscar conta autenticada
+		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
+
+		// 🔍 Buscar template no banco
+		existingTemplate, err := h.templateRepo.GetByID(r.Context(), templateID)
+		if err != nil || existingTemplate == nil || existingTemplate.AccountID != authAccount.ID {
+			utils.SendError(w, http.StatusNotFound, "Template não encontrado")
+			return
+		}
+
+		// Validar tipo de template
+		if existingTemplate.Channel != models.EmailChannel && existingTemplate.Channel != models.WhatsappChannel {
+			utils.SendError(w, http.StatusBadRequest, "Tipo de template inválido")
+			return
+		}
+
+		// Ler arquivo
+		content, err := utils.LoadTemplate(templateID.String(), string(existingTemplate.Channel))
+		if err != nil {
+			utils.SendError(w, http.StatusInternalServerError, "Erro ao carregar template")
+			return
+		}
+
+		if len(content) == 0 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNoContent)
+			json.NewEncoder(w).Encode(map[string]string{"message": "Template não encontrado"})
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		// w.Header().Set("Content-Disposition", "attachment; filename=template.txt")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", existingTemplate.Name))
+		w.Write(content)
 	}
 }

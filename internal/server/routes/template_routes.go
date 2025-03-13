@@ -20,4 +20,5 @@ func RegisterTemplateRoutes(mux *http.ServeMux, authMiddleware func(http.Handler
 	mux.Handle("DELETE /templates/{id}", authMiddleware(handler.DeleteTemplateHandler()))
 
 	mux.Handle("POST /templates/{id}/{type}/upload", authMiddleware(handler.UploadTemplateFileHandler()))
+	mux.Handle("GET /templates/{id}/{type}/download", authMiddleware(handler.DownloadTemplateFileHandler()))
 }

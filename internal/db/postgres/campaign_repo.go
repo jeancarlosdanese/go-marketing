@@ -45,7 +45,7 @@ func (r *campaignRepository) Create(ctx context.Context, campaign *models.Campai
 	query := `
 		INSERT INTO campaigns (
 			account_id, name, description, channels, status, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+		) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
 		RETURNING id, created_at, updated_at
 	`
 

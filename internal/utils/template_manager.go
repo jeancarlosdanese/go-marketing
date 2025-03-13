@@ -35,7 +35,6 @@ func ExistsTemplate(templateID, templateType string) bool {
 	return true
 }
 
-// SaveTemplate salva o template localmente e faz backup no S3
 func SaveTemplate(templateID, templateType string, content []byte) error {
 	path := GetTemplatePath(templateID, templateType)
 
@@ -58,6 +57,10 @@ func SaveTemplate(templateID, templateType string, content []byte) error {
 // LoadTemplate carrega o template do disco ou do S3
 func LoadTemplate(templateID, templateType string) ([]byte, error) {
 	path := GetTemplatePath(templateID, templateType)
+
+	if !ExistsTemplate(templateID, templateType) {
+		return nil, nil
+	}
 
 	// Primeiro tenta localmente
 	content, err := os.ReadFile(path)
