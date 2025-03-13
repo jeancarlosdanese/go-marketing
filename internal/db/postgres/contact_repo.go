@@ -131,7 +131,7 @@ func (r *contactRepo) GetPaginatedContacts(
 
 	// Query base
 	baseQuery := `
-		SELECT id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, tags, last_contact_at, created_at, updated_at
+		SELECT id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, last_contact_at, created_at, updated_at
 		FROM contacts
 		WHERE account_id = $1 AND opt_out_at IS NULL
 	`
@@ -235,18 +235,14 @@ func (r *contactRepo) GetPaginatedContacts(
 	var contacts []models.Contact
 	for rows.Next() {
 		var contact models.Contact
-		var tagsJSON []byte
 
 		if err := rows.Scan(
 			&contact.ID, &contact.Name, &contact.Email, &contact.WhatsApp, &contact.Gender,
-			&contact.BirthDate, &contact.Bairro, &contact.Cidade, &contact.Estado, &tagsJSON,
+			&contact.BirthDate, &contact.Bairro, &contact.Cidade, &contact.Estado,
 			&contact.LastContactAt, &contact.CreatedAt, &contact.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("erro ao escanear contatos: %w", err)
 		}
-
-		// Decodificar JSONB para Tags
-		_ = json.Unmarshal(tagsJSON, &contact.Tags)
 
 		contacts = append(contacts, contact)
 	}

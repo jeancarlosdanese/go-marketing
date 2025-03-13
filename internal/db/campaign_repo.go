@@ -17,4 +17,5 @@ type CampaignRepository interface {
 	UpdateByID(ctx context.Context, campaignID uuid.UUID, campaign *models.Campaign) (*models.Campaign, error)
 	UpdateStatus(ctx context.Context, campaignID uuid.UUID, status string) error
 	DeleteByID(ctx context.Context, campaignID uuid.UUID) error
+	UpdateStatusConcluido(ctx context.Context, campaignID uuid.UUID)
 }

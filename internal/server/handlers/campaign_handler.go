@@ -116,6 +116,8 @@ func (h *campaignHandle) GetCampaignHandler() http.HandlerFunc {
 		// 🔍 Capturar `campaign_id` da URL
 		campaignID := utils.GetUUIDFromRequestPath(r, w, "campaign_id")
 
+		h.campaignRepo.UpdateStatusConcluido(r.Context(), campaignID)
+
 		// 🔍 Buscar campanha no banco
 		campaign, err := h.campaignRepo.GetByID(r.Context(), campaignID)
 		if err != nil {

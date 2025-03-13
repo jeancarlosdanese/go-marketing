@@ -217,3 +217,32 @@ func (r *campaignRepository) DeleteByID(ctx context.Context, campaignID uuid.UUI
 	r.log.Debug("Campanha deletada com sucesso", "id", campaignID)
 	return nil
 }
+
+// UpdateStatusConcluido atualiza o status da campanha para "concluida"
+// somente se houver registros em campaigns_audience e nenhum estiver com status 'pendente'
+func (r *campaignRepository) UpdateStatusConcluido(ctx context.Context, campaignID uuid.UUID) {
+	r.log.Debug("Atualizando status da campanha para 'concluida'", "id", campaignID)
+
+	query := `
+		UPDATE campaigns
+		SET status = 'concluida', updated_at = NOW()
+		WHERE id = $1
+		AND EXISTS (
+			SELECT 1
+			FROM campaigns_audience
+			WHERE campaign_id = $1
+		)
+		AND NOT EXISTS (
+			SELECT 1
+			FROM campaigns_audience
+			WHERE campaign_id = $1 AND status = 'pendente'
+		);
+	`
+
+	_, err := r.db.Exec(query, campaignID)
+	if err != nil {
+		r.log.Error("Erro ao atualizar status da campanha", "error", err)
+	}
+
+	r.log.Debug("Status da campanha atualizado para 'concluida'", "id", campaignID)
+}
