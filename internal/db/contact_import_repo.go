@@ -15,4 +15,5 @@ type ContactImportRepository interface {
 	GetByID(ctx context.Context, accountID uuid.UUID, id uuid.UUID) (*models.ContactImport, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
 	UpdateConfig(ctx context.Context, accountID uuid.UUID, id uuid.UUID, config models.ContactImportConfig) (*models.ContactImport, error)
+	Remove(ctx context.Context, accountID uuid.UUID, id uuid.UUID) error
 }

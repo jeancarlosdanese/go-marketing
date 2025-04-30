@@ -24,6 +24,7 @@ import (
 
 // ContactImportService define a interface do serviço de importação
 type ContactImportService interface {
+	ProcessImport(ctx context.Context, accountID uuid.UUID, importData *models.ContactImport) error
 	ProcessCSVAndSaveDB(ctx context.Context, inputCSV io.Reader, accountID uuid.UUID, config *dto.ConfigImportContactDTO) (int, int, error)
 	GenerateImportConfig(ctx context.Context, headers []string, sampleRecords [][]string) (*models.ContactImportConfig, error)
 }
@@ -48,6 +49,45 @@ func NewContactImportService(contactRepo db.ContactRepository, contactImportRepo
 
 // 🔹 Número de workers para processamento paralelo
 const workerCount = 5
+
+// ProcessImport processa uma importação salva previamente
+func (s *contactImportService) ProcessImport(ctx context.Context, accountID uuid.UUID, importData *models.ContactImport) error {
+	s.log.Info("Iniciando processamento da importação", slog.String("import_id", importData.ID.String()))
+
+	// 🔹 Localiza o arquivo CSV
+	file, err := utils.OpenImportContactsFile(importData.FileName)
+	if err != nil {
+		s.log.Error("Erro ao abrir o arquivo de importação", slog.String("error", err.Error()))
+		_ = s.contactImportRepo.UpdateStatus(ctx, importData.ID, "erro")
+		return err
+	}
+	defer file.Close()
+
+	// 🔹 Converte config (models.ContactImportConfig) → dto.ConfigImportContactDTO
+	configDTO := dto.ConvertToConfigImportContactDTO(*importData.Config)
+
+	// 🔹 Processa e salva os contatos
+	successCount, failedCount, err := s.ProcessCSVAndSaveDB(ctx, file, accountID, configDTO)
+	if err != nil {
+		s.log.Error("Erro ao processar CSV", slog.String("error", err.Error()))
+		_ = s.contactImportRepo.UpdateStatus(ctx, importData.ID, "erro")
+		return err
+	}
+
+	s.log.Info("Processamento finalizado",
+		slog.Int("sucesso", successCount),
+		slog.Int("falha", failedCount),
+		slog.String("import_id", importData.ID.String()))
+
+	// 🔹 Atualiza status no banco
+	if successCount > 0 {
+		_ = s.contactImportRepo.UpdateStatus(ctx, importData.ID, "concluido")
+	} else {
+		_ = s.contactImportRepo.UpdateStatus(ctx, importData.ID, "sem_dados")
+	}
+
+	return nil
+}
 
 // ProcessCSVAndSaveDB processa um CSV e salva os contatos no banco
 func (s *contactImportService) ProcessCSVAndSaveDB(ctx context.Context, inputCSV io.Reader, accountID uuid.UUID, config *dto.ConfigImportContactDTO) (int, int, error) {

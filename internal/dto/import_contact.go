@@ -2,28 +2,24 @@
 
 package dto
 
+import "github.com/jeancarlosdanese/go-marketing/internal/models"
+
 // ConfigImportContactDTO define as instruções para como a AI deve agir na importação de contatos
 type ConfigImportContactDTO struct {
-	AboutData     FieldMapping `json:"about_data"`      // Informações gerais sobre os dados
-	Name          FieldMapping `json:"name"`            // Nome do contato
-	Email         FieldMapping `json:"email"`           // E-mail do contato
-	WhatsApp      FieldMapping `json:"whatsapp"`        // Número de telefone para WhatsApp
-	Gender        FieldMapping `json:"gender"`          // Gênero do contato
-	BirthDate     FieldMapping `json:"birth_date"`      // Data de nascimento no formato "YYYY-MM-DD"
-	Bairro        FieldMapping `json:"bairro"`          // Bairro onde reside
-	Cidade        FieldMapping `json:"cidade"`          // Cidade onde reside
-	Estado        FieldMapping `json:"estado"`          // Sigla do estado (UF)
-	Interesses    FieldMapping `json:"interesses"`      // Como a AI deve categorizar os interesses
-	Perfil        FieldMapping `json:"perfil"`          // Como a AI deve definir o perfil
-	Eventos       FieldMapping `json:"eventos"`         // Como a AI deve categorizar os eventos
-	History       FieldMapping `json:"history"`         // Como a AI deve gerar o histórico
-	LastContactAt FieldMapping `json:"last_contact_at"` // Como a AI deve definir a última data de contato
-}
-
-// FieldMapping define como um campo do CSV deve ser interpretado pela IA
-type FieldMapping struct {
-	Source string            `json:"source"` // Nome da coluna no CSV que contém essa informação
-	Rules  map[string]string `json:"rules"`  // Regras para a IA interpretar esse campo
+	AboutData     models.FieldMapping `json:"about_data"`      // Informações gerais sobre os dados
+	Name          models.FieldMapping `json:"name"`            // Nome do contato
+	Email         models.FieldMapping `json:"email"`           // E-mail do contato
+	WhatsApp      models.FieldMapping `json:"whatsapp"`        // Número de telefone para WhatsApp
+	Gender        models.FieldMapping `json:"gender"`          // Gênero do contato
+	BirthDate     models.FieldMapping `json:"birth_date"`      // Data de nascimento no formato "YYYY-MM-DD"
+	Bairro        models.FieldMapping `json:"bairro"`          // Bairro onde reside
+	Cidade        models.FieldMapping `json:"cidade"`          // Cidade onde reside
+	Estado        models.FieldMapping `json:"estado"`          // Sigla do estado (UF)
+	Interesses    models.FieldMapping `json:"interesses"`      // Como a AI deve categorizar os interesses
+	Perfil        models.FieldMapping `json:"perfil"`          // Como a AI deve definir o perfil
+	Eventos       models.FieldMapping `json:"eventos"`         // Como a AI deve categorizar os eventos
+	History       models.FieldMapping `json:"history"`         // Como a AI deve gerar o histórico
+	LastContactAt models.FieldMapping `json:"last_contact_at"` // Como a AI deve definir a última data de contato
 }
 
 // Exemplo de configuração JSON

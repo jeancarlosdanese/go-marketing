@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/jeancarlosdanese/go-marketing/internal/dto"
+	"github.com/jeancarlosdanese/go-marketing/internal/models"
 )
 
 // GenerateContactPromptForAI gera um prompt dinâmico baseado em um único registro do CSV e nas configurações definidas pelo usuário.
@@ -76,7 +78,7 @@ func generateFieldInstructions(config *dto.ConfigImportContactDTO) string {
 	var instructions []string
 
 	// 🔹 Percorrer cada campo do DTO de configuração
-	fieldMappings := map[string]dto.FieldMapping{
+	fieldMappings := map[string]models.FieldMapping{
 		"name":            config.Name,
 		"email":           config.Email,
 		"whatsapp":        config.WhatsApp,
@@ -100,7 +102,7 @@ func generateFieldInstructions(config *dto.ConfigImportContactDTO) string {
 			if len(mapping.Rules) > 0 {
 				rules := []string{}
 				for ruleKey, ruleValue := range mapping.Rules {
-					rules = append(rules, fmt.Sprintf("%s: %s", ruleKey, ruleValue))
+					rules = append(rules, fmt.Sprintf("%s: %s", strconv.Itoa(ruleKey), string(ruleValue)))
 				}
 				instruction += " e siga as regras: " + fmt.Sprintf("[%s]", strings.Join(rules, "; "))
 			}

@@ -6,12 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -96,37 +94,6 @@ func ExtractPaginationParams(r *http.Request) (int, int, string) {
 	}
 
 	return page, perPage, sort
-}
-
-// FileNameNormalize normaliza o nome do arquivo
-func FileNameNormalize(originalName string) string {
-	// 🔹 Remove a extensão para processar apenas o nome
-	nameWithoutExt := strings.TrimSuffix(originalName, ".csv")
-
-	// 🔹 Converte para minúsculas
-	normalized := strings.ToLower(nameWithoutExt)
-
-	// 🔹 Remove acentos e normaliza caracteres
-	normalized = removeAccents(normalized)
-
-	// 🔹 Substitui espaços por "_"
-	normalized = strings.ReplaceAll(normalized, " ", "_")
-
-	// 🔹 Remove caracteres inválidos, mantendo apenas letras, números, `_`, `-`
-	reg := regexp.MustCompile(`[^a-z0-9_-]`)
-	normalized = reg.ReplaceAllString(normalized, "")
-
-	// 🔹 Remove múltiplos `_` ou `-` consecutivos
-	normalized = regexp.MustCompile(`[_-]+`).ReplaceAllString(normalized, "_")
-
-	// 🔹 Garante que o nome não fique muito curto
-	if utf8.RuneCountInString(normalized) < 3 {
-		normalized = "arquivo"
-	}
-
-	// 🔹 Adiciona timestamp e extensão `.csv`
-	timestamp := time.Now().Unix()
-	return fmt.Sprintf("%s_%d.csv", normalized, timestamp)
 }
 
 // removeAccents remove acentos mantendo as letras originais

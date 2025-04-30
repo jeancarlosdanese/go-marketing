@@ -30,6 +30,8 @@ func RegisterContactRoutes(mux *http.ServeMux, authMiddleware func(http.Handler)
 	// mux.Handle("POST /contacts/import", authMiddleware(importHandler.UploadCSVHandler())) // Importar CSV
 	mux.Handle("POST /contacts/import", authMiddleware(importHandler.UploadHandler()))                  // Importar CSV
 	mux.Handle("GET /contacts/imports", authMiddleware(importHandler.GetImportsHandler()))              // Listar importações
+	mux.Handle("POST /contacts/imports/{id}/start", authMiddleware(importHandler.StartImportHandler())) // Iniciar processamento
 	mux.Handle("GET /contacts/imports/{id}", authMiddleware(importHandler.GetImportByIDHandler()))      // Listar importações
 	mux.Handle("PUT /contacts/imports/{id}", authMiddleware(importHandler.UpdateImportConfigHandler())) // Atualizar configuração de importação
+	mux.Handle("DELETE /contacts/imports/{id}", authMiddleware(importHandler.RemoveImportHandler()))    // Remover importação
 }

@@ -65,3 +65,5 @@ internal_docs
 ./internal_docs/*tmp/
 
 tpm/
+test/
+test/*

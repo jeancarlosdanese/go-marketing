@@ -14,6 +14,7 @@ import (
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
+	"github.com/jeancarlosdanese/go-marketing/internal/utils"
 )
 
 type contactImportRepo struct {
@@ -123,4 +124,22 @@ func (r *contactImportRepo) UpdateConfig(ctx context.Context, accountID uuid.UUI
 	}
 
 	return &imp, nil
+}
+
+func (r *contactImportRepo) Remove(ctx context.Context, accountID uuid.UUID, id uuid.UUID) error {
+	query := `DELETE FROM contact_imports WHERE account_id = $1 AND id = $2 RETURNING file_name`
+	var filename string
+	err := r.db.QueryRowContext(ctx, query, accountID, id).Scan(&filename)
+	if err != nil {
+		r.log.Error("❌ Erro ao deletar importação", slog.String("error", err.Error()))
+		return err
+	}
+
+	err = utils.DeleteImportContactsFile(filename)
+	if err != nil {
+		r.log.Error("❌ Erro ao deletar arquivo de importação", slog.String("error", err.Error()))
+		return err
+	}
+
+	return nil
 }
