@@ -20,4 +20,5 @@ type CampaignAudienceRepository interface {
 	UpdateStatusByMessageID(ctx context.Context, messageID string, status string, feedbackAPI *string) error
 	GetPaginatedCampaignAudience(ctx context.Context, campaignID uuid.UUID, contactType *string, currentPage int, perPage int) (*models.Paginator, error)
 	RemoveAllContactsFromCampaign(ctx context.Context, campaignID uuid.UUID) error
+	GetRandomContact(ctx context.Context, campaignID uuid.UUID, channel string) (*models.Contact, error)
 }

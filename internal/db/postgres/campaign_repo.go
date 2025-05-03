@@ -70,9 +70,8 @@ func (r *campaignRepository) GetByID(ctx context.Context, campaignID uuid.UUID) 
 		SELECT id, account_id, name, description, channels, status, created_at, updated_at
 		FROM campaigns WHERE id = $1
 	`
-	campaign := &models.Campaign{}
+	var campaign models.Campaign
 	var channelsJSON []byte
-
 	err := r.db.QueryRow(query, campaignID).Scan(
 		&campaign.ID, &campaign.AccountID, &campaign.Name, &campaign.Description,
 		&channelsJSON, &campaign.Status, &campaign.CreatedAt, &campaign.UpdatedAt,
@@ -84,16 +83,19 @@ func (r *campaignRepository) GetByID(ctx context.Context, campaignID uuid.UUID) 
 		return nil, fmt.Errorf("erro ao buscar campanha: %w", err)
 	}
 
+	// Verifica se a campanha foi encontrada
+	if campaign.ID == uuid.Nil {
+		r.log.Debug("Campanha não encontrada", "id", campaignID)
+		return nil, nil
+	}
+
 	// Desserializar JSONB
 	if err := json.Unmarshal(channelsJSON, &campaign.Channels); err != nil {
 		r.log.Warn("Erro ao desserializar channels", "error", err)
 	}
-	// if err := json.Unmarshal(filtersJSON, &campaign.Filters); err != nil {
-	// 	r.log.Warn("Erro ao desserializar filters", "error", err)
-	// }
 
 	r.log.Debug("Campanha encontrada", "id", campaign.ID)
-	return campaign, nil
+	return &campaign, nil
 }
 
 // GetAllByAccountID retorna todas as campanhas de uma conta

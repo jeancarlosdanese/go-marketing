@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -438,4 +439,56 @@ func (r *campaignAudienceRepo) GetPaginatedCampaignAudience(
 func (r *campaignAudienceRepo) RemoveAllContactsFromCampaign(ctx context.Context, campaignID uuid.UUID) error {
 	_, err := r.db.Exec(`DELETE FROM campaigns_audience WHERE campaign_id = $1`, campaignID)
 	return err
+}
+
+// GetRandomContact retorna um contato aleatório da campanha
+func (r *campaignAudienceRepo) GetRandomContact(ctx context.Context, campaignID uuid.UUID, channel string) (*models.Contact, error) {
+	queryAudience := `
+		SELECT id, contact_id, type, status, message_id, feedback_api, created_at, updated_at
+		FROM campaigns_audience
+		WHERE campaign_id = $1 AND type = $2
+		ORDER BY RANDOM()
+		LIMIT 1
+	`
+	randomAudience := r.db.QueryRowContext(ctx, queryAudience, campaignID, channel)
+
+	var audience models.CampaignAudience
+	if err := randomAudience.Scan(&audience.ID, &audience.ContactID, &audience.Type, &audience.Status, &audience.MessageID, &audience.Feedback, &audience.CreatedAt, &audience.UpdatedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Nenhum contato encontrado
+		}
+		return nil, err
+	}
+
+	// Buscar contato by ID
+	queryContact := `
+		SELECT id, account_id, name, email, whatsapp, gender, birth_date, bairro, cidade, estado, tags, history, opt_out_at, last_contact_at, created_at, updated_at
+		FROM contacts WHERE id = $1
+	`
+
+	contact := &models.Contact{}
+	var tagsJSON []byte
+
+	err := r.db.QueryRow(queryContact, audience.ContactID).Scan(
+		&contact.ID, &contact.AccountID, &contact.Name, &contact.Email, &contact.WhatsApp,
+		&contact.Gender, &contact.BirthDate, &contact.Bairro, &contact.Cidade, &contact.Estado,
+		&tagsJSON, &contact.History, &contact.OptOutAt, &contact.LastContactAt,
+		&contact.CreatedAt, &contact.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		r.log.Error("Erro ao buscar contato",
+			slog.String("contact_id", audience.ID.String()),
+			slog.String("error", err.Error()))
+		return nil, fmt.Errorf("erro ao buscar contato: %w", err)
+	}
+
+	if len(tagsJSON) > 0 {
+		_ = json.Unmarshal(tagsJSON, &contact.Tags)
+	}
+
+	return contact, nil
 }

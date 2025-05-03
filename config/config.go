@@ -60,3 +60,7 @@ func (c *Config) loadFromFile() {
 		os.Setenv(key, value)
 	}
 }
+
+func GetEnvVar(key string) string {
+	return os.Getenv(key)
+}

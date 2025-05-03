@@ -1,4 +1,4 @@
-// File: /internal/dto/campaign_message.go
+// File: internal/dto/campaign_message_dto.go
 
 package dto
 
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jeancarlosdanese/go-marketing/internal/models"
 )
 
 type EmailData struct {
@@ -101,6 +102,119 @@ func NewCCampaignMessageFullDTO(data CampaignMessageFullDTO) CampaignMessageFull
 		data.Idade = &idade
 	}
 	return data
+}
+
+type CampaignMessageCreateDTO struct {
+	CampaignID  uuid.UUID  `json:"campaign_id"`
+	ContactID   *uuid.UUID `json:"contact_id,omitempty"`
+	Channel     string     `json:"channel"` // "email" ou "whatsapp"
+	Saudacao    string     `json:"saudacao"`
+	Corpo       string     `json:"corpo"`
+	Finalizacao string     `json:"finalizacao"`
+	Assinatura  string     `json:"assinatura"`
+	PromptUsado string     `json:"prompt_usado"`
+	Feedback    []string   `json:"feedback,omitempty"`
+	Version     int        `json:"version"`
+	IsApproved  bool       `json:"is_approved"`
+}
+
+func (dto *CampaignMessageCreateDTO) ToModel() *models.CampaignMessage {
+	return &models.CampaignMessage{
+		CampaignID:  dto.CampaignID,
+		ContactID:   dto.ContactID,
+		Channel:     dto.Channel,
+		Saudacao:    dto.Saudacao,
+		Corpo:       dto.Corpo,
+		Finalizacao: dto.Finalizacao,
+		Assinatura:  dto.Assinatura,
+		PromptUsado: dto.PromptUsado,
+		Feedback:    dto.Feedback,
+		Version:     dto.Version,
+		IsApproved:  dto.IsApproved,
+	}
+}
+
+func FromModel(msg *models.CampaignMessage) *CampaignMessageCreateDTO {
+	return &CampaignMessageCreateDTO{
+		CampaignID:  msg.CampaignID,
+		ContactID:   msg.ContactID,
+		Channel:     msg.Channel,
+		Saudacao:    msg.Saudacao,
+		Corpo:       msg.Corpo,
+		Finalizacao: msg.Finalizacao,
+		Assinatura:  msg.Assinatura,
+		PromptUsado: msg.PromptUsado,
+		Feedback:    msg.Feedback,
+		Version:     msg.Version,
+		IsApproved:  msg.IsApproved,
+	}
+}
+
+type CampaignContentResult struct {
+	Saudacao    string `json:"saudacao"`
+	Corpo       string `json:"corpo"`
+	Finalizacao string `json:"finalizacao"`
+	Assinatura  string `json:"assinatura"`
+}
+
+type RenderedMessageDTO struct {
+	Content    *CampaignContentResult `json:"content"`
+	Preview    string                 `json:"preview"` // HTML renderizado ou markdown
+	Prompt     string                 `json:"prompt"`
+	Channel    string                 `json:"channel"`
+	Version    int                    `json:"version"`
+	IsApproved bool                   `json:"is_approved"`
+}
+
+func ToCampaignMessageFullDTO(
+	account models.Account,
+	campaign models.Campaign,
+	settings models.CampaignSettings,
+	contact models.Contact,
+	channel string,
+) CampaignMessageFullDTO {
+	templateID := campaign.Channels[channel].TemplateID
+
+	dto := CampaignMessageFullDTO{
+		ID:            uuid.New(),
+		AccountID:     account.ID,
+		CampaignID:    campaign.ID,
+		ContactID:     contact.ID,
+		Type:          channel,
+		Status:        "gerada",
+		Name:          contact.Name,
+		Email:         contact.Email,
+		WhatsApp:      contact.WhatsApp,
+		Gender:        contact.Gender,
+		BirthDate:     contact.BirthDate,
+		Bairro:        contact.Bairro,
+		Cidade:        contact.Cidade,
+		Estado:        contact.Estado,
+		Tags:          models.ConvertContactTags(contact.Tags),
+		History:       contact.History,
+		OptOutAt:      contact.OptOutAt,
+		LastContactAt: contact.LastContactAt,
+		CreatedAt:     contact.CreatedAt,
+		UpdatedAt:     contact.UpdatedAt,
+
+		CampaignName:        campaign.Name,
+		CampaignDescription: campaign.Description,
+
+		TemplateID:           &templateID,
+		Brand:                settings.Brand,
+		Subject:              &settings.Subject,
+		Tone:                 settings.Tone,
+		EmailFrom:            &settings.EmailFrom,
+		EmailReplyTo:         &settings.EmailReply,
+		EmailFooter:          settings.EmailFooter,
+		EmailInstructions:    &settings.EmailInstructions,
+		WhatsAppFrom:         &settings.WhatsAppFrom,
+		WhatsAppReplyTo:      &settings.WhatsAppReply,
+		WhatsAppFooter:       settings.WhatsAppFooter,
+		WhatsAppInstructions: &settings.WhatsAppInstructions,
+	}
+
+	return NewCCampaignMessageFullDTO(dto)
 }
 
 // calcularIdade retorna a idade baseada na data de nascimento

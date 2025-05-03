@@ -55,11 +55,12 @@ func main() {
 	audienceRepo := postgres.NewCampaignAudienceRepository(dbConn)
 	campaignSettingsRepo := postgres.NewCampaignSettingsRepository(dbConn)
 	contactImportRepo := postgres.NewContactImportRepository(dbConn)
+	campaignMessageRepo := postgres.NewCampaignMessageRepository(dbConn)
 
 	// Inicializar serviços
 	sqsService, _ := service.NewSQSService(os.Getenv("SQS_EMAIL_URL"), os.Getenv("SQS_WHATSAPP_URL"))
 	openAIService := service.NewOpenAIService()
-	campaignProcessor := service.NewCampaignProcessorService(sqsService, audienceRepo)
+	campaignProcessor := service.NewCampaignProcessorService(sqsService, openAIService, audienceRepo)
 	emailService := service.NewEmailService(openAIService)
 	whatsappService := service.NewWhatsAppService(
 		os.Getenv("EVOLUTION_API_URL"),
@@ -93,6 +94,7 @@ func main() {
 		otpRepo, accountRepo, accountSettingsRepo, contactRepo,
 		templateRepo, campaignRepo, audienceRepo, campaignSettingsRepo,
 		openAIService, campaignProcessor, contactImportRepo,
+		campaignMessageRepo,
 	))
 
 	mux.Handle("/", router)

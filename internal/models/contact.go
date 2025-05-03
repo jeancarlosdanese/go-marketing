@@ -34,3 +34,22 @@ type ContactTags struct {
 	Perfil     []*string `json:"perfil,omitempty"`
 	Eventos    []*string `json:"eventos,omitempty"`
 }
+
+func ConvertContactTags(tags *ContactTags) map[string]interface{} {
+	if tags == nil {
+		return nil
+	}
+
+	convertedTags := make(map[string]interface{})
+	if tags.Interesses != nil {
+		convertedTags["interesses"] = tags.Interesses
+	}
+	if tags.Perfil != nil {
+		convertedTags["perfil"] = tags.Perfil
+	}
+	if tags.Eventos != nil {
+		convertedTags["eventos"] = tags.Eventos
+	}
+
+	return convertedTags
+}

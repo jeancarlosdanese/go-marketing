@@ -23,6 +23,7 @@ func NewRouter(
 	openAIService service.OpenAIService,
 	campaignProcessor service.CampaignProcessorService,
 	contactImportRepo db.ContactImportRepository,
+	campaignMessageRepo db.CampaignMessageRepository,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -39,6 +40,7 @@ func NewRouter(
 	RegisterCampaignAudienceRoutes(mux, authMiddleware, campaignRepo, contactRepo, audienceRepo)
 	RegisterSESFeedBackRoutes(mux, audienceRepo, contactRepo)
 	RegisterCampaignSettingsRoutes(mux, authMiddleware, campaignRepo, campaignSettingsRepo)
+	RegisterCampaignMessageRoutes(mux, authMiddleware, campaignRepo, campaignSettingsRepo, contactRepo, audienceRepo, campaignMessageRepo, campaignProcessor)
 
 	// 🔥 Rota de Health Check
 	mux.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
