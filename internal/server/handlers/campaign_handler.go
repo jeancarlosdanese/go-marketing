@@ -149,7 +149,7 @@ func (h *campaignHandle) GetAllCampaignsHandler() http.HandlerFunc {
 		// 🔍 Buscar conta autenticada
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
-		// 🔍 Capturar filtros da URL (ex.: `?status=active&name=promo`)
+		// 🔍 Capturar filtros da URL (ex.: `?status=ativo&name=promo`)
 		filters := map[string]string{}
 		if status := r.URL.Query().Get("status"); status != "" {
 			filters["status"] = status

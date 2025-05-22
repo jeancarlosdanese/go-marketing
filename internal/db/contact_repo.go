@@ -19,4 +19,5 @@ type ContactRepository interface {
 	UpdateByID(ctx context.Context, contactID uuid.UUID, contact *models.Contact) (*models.Contact, error)
 	DeleteByID(ctx context.Context, contactID uuid.UUID) error
 	GetAvailableContactsForCampaign(ctx context.Context, accountID uuid.UUID, campaignID uuid.UUID, filters map[string]string, sort string, currentPage int, perPage int) (*models.Paginator, error)
+	FindOrCreateByWhatsApp(ctx context.Context, accountID uuid.UUID, whatsapp string) (*models.Contact, error)
 }

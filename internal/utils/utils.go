@@ -41,7 +41,7 @@ func SafeStringMap(m map[string]*string, key string) string {
 	return *m[key]
 }
 
-// SendError envia um erro HTTP com o código e mensagem fornecidos.
+// SanitizeJSONResponse remove espaços extras e formata o JSON.
 func SanitizeJSONResponse(rawJSON string) string {
 	rawJSON = strings.TrimSpace(rawJSON)               // Remove espaços extras
 	rawJSON = strings.TrimPrefix(rawJSON, "```json\n") // Remove cabeçalho errado
@@ -49,7 +49,7 @@ func SanitizeJSONResponse(rawJSON string) string {
 	return rawJSON
 }
 
-// SendError envia um erro HTTP com o código e mensagem fornecidos.
+// GetUUIDFromRequestPath extrai um UUID de uma variável na URL do request.
 func GetUUIDFromRequestPath(r *http.Request, w http.ResponseWriter, variable string) uuid.UUID {
 	idParam := r.PathValue(variable)
 	id, err := uuid.Parse(idParam)
@@ -94,6 +94,14 @@ func ExtractPaginationParams(r *http.Request) (int, int, string) {
 	}
 
 	return page, perPage, sort
+}
+
+// ExtractWhatsAppNumber extrai o número do WhatsApp do JID remoto
+func ExtractWhatsAppNumber(remoteJid string) string {
+	if strings.Contains(remoteJid, "@") {
+		return strings.Split(remoteJid, "@")[0]
+	}
+	return remoteJid
 }
 
 // removeAccents remove acentos mantendo as letras originais

@@ -24,6 +24,9 @@ func NewRouter(
 	campaignProcessor service.CampaignProcessorService,
 	contactImportRepo db.ContactImportRepository,
 	campaignMessageRepo db.CampaignMessageRepository,
+	chatRepo db.ChatRepository,
+	chatContactRepo db.ChatContactRepository,
+	chatMessageRepo db.ChatMessageRepository,
 ) *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -41,6 +44,12 @@ func NewRouter(
 	RegisterSESFeedBackRoutes(mux, audienceRepo, contactRepo)
 	RegisterCampaignSettingsRoutes(mux, authMiddleware, campaignRepo, campaignSettingsRepo)
 	RegisterCampaignMessageRoutes(mux, authMiddleware, campaignRepo, campaignSettingsRepo, contactRepo, audienceRepo, campaignMessageRepo, campaignProcessor)
+
+	// 🔥 Registrar rotas do WhatsApp
+	evolutionService := service.NewEvolutionService()
+	chatService := service.NewChatWhatsAppService(chatRepo, contactRepo, chatContactRepo, chatMessageRepo, openAIService, evolutionService)
+	RegisterChatRoutes(mux, authMiddleware, chatRepo, contactRepo, chatContactRepo, chatMessageRepo, openAIService, chatService)
+	RegisterWebhookRoutes(mux, chatService)
 
 	// 🔥 Rota de Health Check
 	mux.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

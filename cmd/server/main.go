@@ -56,6 +56,9 @@ func main() {
 	campaignSettingsRepo := postgres.NewCampaignSettingsRepository(dbConn)
 	contactImportRepo := postgres.NewContactImportRepository(dbConn)
 	campaignMessageRepo := postgres.NewCampaignMessageRepository(dbConn)
+	chatRepo := postgres.NewChatRepository(dbConn)
+	chatContactRepo := postgres.NewChatContactRepository(dbConn)
+	chatMessageRepo := postgres.NewChatMessageRepository(dbConn)
 
 	// Inicializar serviços
 	sqsService, _ := service.NewSQSService(os.Getenv("SQS_EMAIL_URL"), os.Getenv("SQS_WHATSAPP_URL"))
@@ -94,7 +97,7 @@ func main() {
 		otpRepo, accountRepo, accountSettingsRepo, contactRepo,
 		templateRepo, campaignRepo, audienceRepo, campaignSettingsRepo,
 		openAIService, campaignProcessor, contactImportRepo,
-		campaignMessageRepo,
+		campaignMessageRepo, chatRepo, chatContactRepo, chatMessageRepo,
 	))
 
 	mux.Handle("/", router)

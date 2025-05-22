@@ -585,3 +585,48 @@ func (r *contactRepo) GetAvailableContactsForCampaign(
 		Data:         contacts,
 	}, nil
 }
+
+// 📌 Buscar contato por WhatsApp ou criar se não existir
+func (r *contactRepo) FindOrCreateByWhatsApp(ctx context.Context, accountID uuid.UUID, whatsapp string) (*models.Contact, error) {
+	query := `
+		SELECT id, account_id, name, whatsapp
+		FROM contacts
+		WHERE account_id = $1 AND whatsapp = $2
+		LIMIT 1
+	`
+
+	var contact models.Contact
+	err := r.db.QueryRowContext(ctx, query, accountID, whatsapp).Scan(
+		&contact.ID,
+		&contact.AccountID,
+		&contact.Name,
+		&contact.WhatsApp,
+	)
+	if err == sql.ErrNoRows {
+		// 🔹 Inserir contato e retornar dados
+		insert := `
+			INSERT INTO contacts (account_id, name, whatsapp, created_at, updated_at)
+			VALUES ($1, $2, $3, now(), now())
+			RETURNING id, created_at, updated_at
+		`
+		nome := "Contato " + whatsapp[len(whatsapp)-4:]
+
+		err := r.db.QueryRowContext(ctx, insert, accountID, nome, whatsapp).Scan(
+			&contact.ID,
+			&contact.CreatedAt,
+			&contact.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		contact.AccountID = accountID
+		contact.Name = nome
+		contact.WhatsApp = &whatsapp
+		return &contact, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	return &contact, nil
+}

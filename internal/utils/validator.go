@@ -5,6 +5,8 @@ import (
 	"errors"
 	"regexp"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // ValidateEmail verifica se o e-mail é válido
@@ -65,6 +67,17 @@ func ValidateAWSRegion(region string) error {
 
 	if !validRegions[region] {
 		return errors.New("região AWS inválida")
+	}
+	return nil
+}
+
+// VlaidateUUID valida se a string é um UUID válido
+func ValidateUUID(uuidStr string) error {
+	if len(uuidStr) != 36 {
+		return errors.New("o ID deve ser um UUID válido")
+	}
+	if _, err := uuid.Parse(uuidStr); err != nil {
+		return errors.New("o ID deve ser um UUID válido")
 	}
 	return nil
 }
