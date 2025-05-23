@@ -27,16 +27,20 @@ type ChatWhatsAppService interface {
 	ListarMensagens(ctx context.Context, accountID, chatID, contactID uuid.UUID) ([]*models.ChatMessage, error)
 	SugerirRespostaIA(ctx context.Context, accountID, chatID, contactID uuid.UUID, mensagemRecebida string) (string, error)
 	ProcessarMensagemRecebida(ctx context.Context, evolutionInstance, remoteJid, texto string) error
+
+	IniciarSessaoWhatsApp(ctx context.Context, accountID, chatID uuid.UUID) (*StartSessionResponse, error)
+	ObterQRCodeSessao(ctx context.Context, accountID, chatID uuid.UUID) (*QRCodeResponse, error)
 }
 
 type chatWhatsAppService struct {
-	log              *slog.Logger
-	chatRepo         db.ChatRepository
-	contactRepo      db.ContactRepository
-	chatContactRepo  db.ChatContactRepository
-	chatMessageRepo  db.ChatMessageRepository
-	openaiService    OpenAIService
-	evolutionService EvolutionService
+	log             *slog.Logger
+	chatRepo        db.ChatRepository
+	contactRepo     db.ContactRepository
+	chatContactRepo db.ChatContactRepository
+	chatMessageRepo db.ChatMessageRepository
+	openaiService   OpenAIService
+	baileysService  WhatsAppBaileysService
+	// evolutionService EvolutionService
 }
 
 func NewChatWhatsAppService(
@@ -44,17 +48,19 @@ func NewChatWhatsAppService(
 	contactRepo db.ContactRepository,
 	chatContactRepo db.ChatContactRepository,
 	chatMessageRepo db.ChatMessageRepository,
-	openai OpenAIService,
-	evolution EvolutionService,
+	openaiService OpenAIService,
+	baileysService WhatsAppBaileysService,
+	// evolution EvolutionService,
 ) ChatWhatsAppService {
 	return &chatWhatsAppService{
-		log:              logger.GetLogger(),
-		chatRepo:         chatRepo,
-		contactRepo:      contactRepo,
-		chatContactRepo:  chatContactRepo,
-		chatMessageRepo:  chatMessageRepo,
-		openaiService:    openai,
-		evolutionService: evolution,
+		log:             logger.GetLogger(),
+		chatRepo:        chatRepo,
+		contactRepo:     contactRepo,
+		chatContactRepo: chatContactRepo,
+		chatMessageRepo: chatMessageRepo,
+		openaiService:   openaiService,
+		baileysService:  baileysService,
+		// evolutionService: evolution,
 	}
 }
 
@@ -238,7 +244,8 @@ func (s *chatWhatsAppService) RegistrarMensagemManual(ctx context.Context, accou
 		// Buscar contato
 		contato, err := s.contactRepo.GetByID(ctx, contactID)
 		if err == nil && contato.WhatsApp != nil {
-			err = s.evolutionService.SendTextMessage(chat.EvolutionInstance, *contato.WhatsApp, chatMessage.Content)
+			// err = s.evolutionService.SendTextMessage(chat.EvolutionInstance, *contato.WhatsApp, chatMessage.Content)
+			_, err = s.baileysService.SendTextMessage(chat.EvolutionInstance, *contato.WhatsApp, chatMessage.Content)
 			if err != nil {
 				s.log.Error("Erro ao enviar mensagem para o WhatsApp", slog.String("numero", *contato.WhatsApp), slog.String("mensagem", chatMessage.Content), slog.Any("erro", err))
 			} else {
@@ -313,4 +320,35 @@ func (s *chatWhatsAppService) ProcessarMensagemRecebida(ctx context.Context, evo
 	}
 
 	return nil
+}
+
+// IniciarSessaoWhatsApp inicia uma sessão do WhatsApp usando a API Baileys
+func (s *chatWhatsAppService) IniciarSessaoWhatsApp(ctx context.Context, accountID, chatID uuid.UUID) (*StartSessionResponse, error) {
+	chat, err := s.chatRepo.GetByID(ctx, accountID, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("chat não encontrado: %w", err)
+	}
+
+	s.log.Debug("Iniciando sessão do WhatsApp", slog.String("evolution_instance", chat.EvolutionInstance), slog.String("webhook_url", chat.WebhookURL))
+	// Verifica se a instância e o webhook estão configurados
+
+	if chat.EvolutionInstance == "" || chat.WebhookURL == "" {
+		return nil, fmt.Errorf("chat está sem evolution_instance ou webhook_url configurado")
+	}
+
+	return s.baileysService.StartSession(chat.EvolutionInstance, chat.WebhookURL)
+}
+
+// ObterQRCodeSessao obtém o QR Code para autenticação da sessão do WhatsApp
+func (s *chatWhatsAppService) ObterQRCodeSessao(ctx context.Context, accountID, chatID uuid.UUID) (*QRCodeResponse, error) {
+	chat, err := s.chatRepo.GetByID(ctx, accountID, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("chat não encontrado: %w", err)
+	}
+
+	if chat.EvolutionInstance == "" {
+		return nil, fmt.Errorf("chat está sem evolution_instance configurado")
+	}
+
+	return s.baileysService.GetQRCode(chat.EvolutionInstance)
 }

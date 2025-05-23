@@ -1,17 +1,17 @@
-// internal/dto/webhook_dto.go
+// internal/dto/webhook_evolution_dto.go
 
 package dto
 
-type WebhookPayload struct {
-	Event       string      `json:"event"`
-	Instance    string      `json:"instance"`
-	Data        WebhookData `json:"data"`
-	Sender      string      `json:"sender"`
-	DateTime    string      `json:"date_time"`
-	Destination string      `json:"destination"`
+type WebhookEvolutionPayload struct {
+	Event       string               `json:"event"`
+	Instance    string               `json:"instance"`
+	Data        WebhookEvolutionData `json:"data"`
+	Sender      string               `json:"sender"`
+	DateTime    string               `json:"date_time"`
+	Destination string               `json:"destination"`
 }
 
-type WebhookData struct {
+type WebhookEvolutionData struct {
 	Key struct {
 		RemoteJID string `json:"remoteJid"`
 		FromMe    bool   `json:"fromMe"`

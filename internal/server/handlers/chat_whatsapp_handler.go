@@ -24,6 +24,8 @@ type ChatWhatsAppHandler interface {
 	RegistrarMensagem() http.HandlerFunc
 	ListarMensagens() http.HandlerFunc
 	SugerirResposta() http.HandlerFunc
+	IniciarSessaoWhatsApp() http.HandlerFunc
+	ObterQrCodeHandler() http.HandlerFunc
 }
 
 type chatWhatsAppHandler struct {
@@ -246,5 +248,53 @@ func (h *chatWhatsAppHandler) SugerirResposta() http.HandlerFunc {
 		json.NewEncoder(w).Encode(SugerirRespostaResponse{
 			RespostaSugerida: resposta,
 		})
+	}
+}
+
+// IniciarSessaoWhatsApp inicia uma sessão do WhatsApp via ChatWhatsAppService
+func (h *chatWhatsAppHandler) IniciarSessaoWhatsApp() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		authAccount := middleware.GetAuthAccountOrFail(ctx, w, h.log)
+		if authAccount == nil {
+			return
+		}
+
+		chatID := utils.GetUUIDFromRequestPath(r, w, "chat_id")
+		if chatID == uuid.Nil {
+			return
+		}
+
+		resp, err := h.chatWhatsAppService.IniciarSessaoWhatsApp(ctx, authAccount.ID, chatID)
+		if err != nil {
+			h.log.Error("Erro ao iniciar sessão WhatsApp", slog.Any("erro", err))
+			utils.SendError(w, 500, err.Error())
+			return
+		}
+
+		json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// ObterQrCodeHandler obtém o QR Code para autenticação do WhatsApp
+func (h *chatWhatsAppHandler) ObterQrCodeHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		account := middleware.GetAuthAccountOrFail(r.Context(), w, logger.GetLogger())
+		if account == nil {
+			return
+		}
+
+		chatID := utils.GetUUIDFromRequestPath(r, w, "chat_id")
+		if chatID == uuid.Nil {
+			return
+		}
+
+		result, err := h.chatWhatsAppService.ObterQRCodeSessao(r.Context(), account.ID, chatID)
+		if err != nil {
+			utils.SendError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		json.NewEncoder(w).Encode(result)
 	}
 }

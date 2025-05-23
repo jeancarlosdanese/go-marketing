@@ -1,16 +1,20 @@
 ```mermaid
 graph TD
-  subgraph Cliente
-    C1[Frontend Next.js]
+  subgraph Frontend Next.js
+    A[Usuário] --> B[chat-whatsapp.tsx]
   end
 
-  subgraph Backend
-    G1[Go API go-marketing]
-    N1[Node.js - Baileys Worker]
+  subgraph Backend Go
+    B --> C[API: /chats, /mensagens, /sugerir-resposta]
+    E[Webhook recebido de Node] --> F[chatSvc.ProcessarMensagemRecebida]
+    C --> G[PostgreSQL]
+    F --> G
   end
 
-  EvolutionAPI -- Webhook --> G1
-  C1 -- REST/axios --> G1
-  G1 -- HTTP/WebSocket --> N1
-  N1 -- QR Code, envio, eventos --> G1
+  subgraph Backend Node Baileys
+    C2[/sessions/:id/start/] --> H[Baileys SessionManager]
+    D1[Webhook Baileys] --> E
+    C --> C2
+  end
+
 ```

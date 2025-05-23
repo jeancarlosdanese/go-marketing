@@ -40,7 +40,7 @@ func (h *webhookHandler) Handle() http.HandlerFunc {
 		tee := io.TeeReader(r.Body, &rawBody)
 		defer r.Body.Close()
 
-		var payload dto.WebhookPayload
+		var payload dto.WebhookBaileysPayload
 		if err := json.NewDecoder(tee).Decode(&payload); err != nil {
 			h.log.Error("❌ Payload inválido no webhook", slog.Any("erro", err))
 			utils.SendError(w, 400, "Payload inválido")
@@ -50,10 +50,10 @@ func (h *webhookHandler) Handle() http.HandlerFunc {
 		// Log do JSON cru
 		h.log.Debug("🔍 Payload cru recebido", slog.String("body", rawBody.String()))
 
-		numero := payload.Data.Key.RemoteJID
-		msg := payload.Data.Message.Conversation
-		msgType := payload.Data.MessageType
-		instancia := payload.Instance
+		numero := payload.From
+		msg := payload.Message
+		msgType := payload.Type
+		instancia := payload.SessionID
 
 		h.log.Info("📩 Webhook recebido",
 			slog.String("instancia", instancia),
@@ -62,7 +62,7 @@ func (h *webhookHandler) Handle() http.HandlerFunc {
 			slog.String("mensagem", msg),
 		)
 
-		if msgType != "conversation" || msg == "" {
+		if msgType != "text" || msg == "" {
 			h.log.Warn("Mensagem ignorada: tipo inválido ou vazia")
 			utils.SendSuccess(w, 200, map[string]string{"status": "ignorada"})
 			return

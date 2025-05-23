@@ -1,4 +1,4 @@
-// File: internal/middleware/auth_middleware.go
+// internal/middleware/auth_middleware.go
 
 package middleware
 
@@ -6,6 +6,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/auth"
@@ -19,6 +20,12 @@ type contextKeyAccount struct{}
 
 // AuthAccountKey é a key usada para buscar a conta do contexto.
 var AuthAccountKey contextKeyAccount = struct{}{}
+
+// InternalAPIKey é a chave de API interna usada para autenticação.
+const InternalAPIKeyHeader = "X-API-Key"
+
+// InternalAPIKey é carregado do .env
+var InternalAPIKey = os.Getenv("INTERNAL_API_KEY")
 
 // AuthMiddleware recebe o repositório e injeta a `Account` autenticada no contexto.
 func AuthMiddleware(accountRepo db.AccountRepository) func(http.Handler) http.HandlerFunc {
@@ -89,4 +96,17 @@ func IsAdminOrOwner(account *models.Account, ownerID uuid.UUID) bool {
 	// Se não for admin, retorna true apenas se for o dono do recurso.
 	// Exemplo:
 	return account.IsAdmin() || (account.ID == ownerID)
+}
+
+// InternalAPIKeyMiddleware valida chamadas internas entre serviços (ex: Node.js -> Go)
+func InternalAPIKeyMiddleware(next http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		key := r.Header.Get(InternalAPIKeyHeader)
+		if key == "" || key != InternalAPIKey {
+			utils.SendError(w, http.StatusUnauthorized, "Chave de API interna inválida")
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	}
 }

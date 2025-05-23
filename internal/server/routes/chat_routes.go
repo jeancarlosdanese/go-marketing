@@ -26,7 +26,7 @@ func RegisterChatRoutes(
 	// 🔒 Protegido por autenticação
 	mux.Handle("POST /chats", authMiddleware(chatHandler.CreateChat()))
 	mux.Handle("GET /chats", authMiddleware(chatHandler.ListChats()))
-	mux.Handle("GET /chats/{id}", authMiddleware(chatHandler.GetChatByID()))
+	mux.Handle("GET /chats/{chat_id}", authMiddleware(chatHandler.GetChatByID()))
 	mux.Handle("PUT /chats/{chat_id}", authMiddleware(chatHandler.UpdateChat()))
 
 	mux.Handle("GET /chats/{chat_id}/contatos", authMiddleware(chatHandler.ListarContatosDoChat()))
@@ -34,4 +34,7 @@ func RegisterChatRoutes(
 	mux.Handle("GET /chats/{chat_id}/contatos/{contact_id}/mensagens", authMiddleware(chatHandler.ListarMensagens()))
 
 	mux.Handle("POST /chat/sugerir-resposta", authMiddleware(chatHandler.SugerirResposta()))
+
+	mux.Handle("POST /chats/{chat_id}/iniciar-sessao", authMiddleware(chatHandler.IniciarSessaoWhatsApp()))
+	mux.Handle("GET /chats/{chat_id}/qrcode", authMiddleware(chatHandler.ObterQrCodeHandler()))
 }

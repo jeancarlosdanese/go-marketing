@@ -4,6 +4,7 @@ package routes
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/middleware"
@@ -46,8 +47,9 @@ func NewRouter(
 	RegisterCampaignMessageRoutes(mux, authMiddleware, campaignRepo, campaignSettingsRepo, contactRepo, audienceRepo, campaignMessageRepo, campaignProcessor)
 
 	// 🔥 Registrar rotas do WhatsApp
-	evolutionService := service.NewEvolutionService()
-	chatService := service.NewChatWhatsAppService(chatRepo, contactRepo, chatContactRepo, chatMessageRepo, openAIService, evolutionService)
+	// evolutionService := service.NewEvolutionService()
+	baileysService := service.NewWhatsAppBaileysService(os.Getenv("WHATSAPP_API_URL"), os.Getenv("WHATSAPP_API_KEY"))
+	chatService := service.NewChatWhatsAppService(chatRepo, contactRepo, chatContactRepo, chatMessageRepo, openAIService, *baileysService)
 	RegisterChatRoutes(mux, authMiddleware, chatRepo, contactRepo, chatContactRepo, chatMessageRepo, openAIService, chatService)
 	RegisterWebhookRoutes(mux, chatService)
 
