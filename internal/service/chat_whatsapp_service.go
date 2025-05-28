@@ -26,10 +26,11 @@ type ChatWhatsAppService interface {
 	RegistrarMensagemManual(ctx context.Context, accountID, chatID, contactID uuid.UUID, chatMessage dto.ChatMessageCreateDTO) (*models.ChatMessage, error)
 	ListarMensagens(ctx context.Context, accountID, chatID, contactID uuid.UUID) ([]*models.ChatMessage, error)
 	SugerirRespostaIA(ctx context.Context, accountID, chatID, contactID uuid.UUID, mensagemRecebida string) (string, error)
-	ProcessarMensagemRecebida(ctx context.Context, evolutionInstance, remoteJid, texto string) error
+	ProcessarMensagemRecebida(ctx context.Context, instanceName, remoteJid, texto string) error
 
 	IniciarSessaoWhatsApp(ctx context.Context, accountID, chatID uuid.UUID) (*StartSessionResponse, error)
 	ObterQRCodeSessao(ctx context.Context, accountID, chatID uuid.UUID) (*QRCodeResponse, error)
+	VerificarSessionStatusViaAPI(ctx context.Context, accountID, chatID uuid.UUID) (*dto.SessionStatusDTO, error)
 }
 
 type chatWhatsAppService struct {
@@ -130,7 +131,7 @@ func (s *chatWhatsAppService) AtualizarChat(ctx context.Context, accountID, chat
 	chat.Title = data.Title
 	chat.Instructions = data.Instructions
 	chat.PhoneNumber = data.PhoneNumber
-	chat.EvolutionInstance = data.EvolutionInstance
+	chat.InstanceName = data.InstanceName
 	chat.WebhookURL = data.WebhookURL
 	chat.UpdatedAt = time.Now()
 
@@ -244,8 +245,8 @@ func (s *chatWhatsAppService) RegistrarMensagemManual(ctx context.Context, accou
 		// Buscar contato
 		contato, err := s.contactRepo.GetByID(ctx, contactID)
 		if err == nil && contato.WhatsApp != nil {
-			// err = s.evolutionService.SendTextMessage(chat.EvolutionInstance, *contato.WhatsApp, chatMessage.Content)
-			_, err = s.baileysService.SendTextMessage(chat.EvolutionInstance, *contato.WhatsApp, chatMessage.Content)
+			// err = s.evolutionService.SendTextMessage(chat.InstanceName, *contato.WhatsApp, chatMessage.Content)
+			_, err = s.baileysService.SendTextMessage(chat.InstanceName, *contato.WhatsApp, chatMessage.Content)
 			if err != nil {
 				s.log.Error("Erro ao enviar mensagem para o WhatsApp", slog.String("numero", *contato.WhatsApp), slog.String("mensagem", chatMessage.Content), slog.Any("erro", err))
 			} else {
@@ -276,11 +277,11 @@ func (s *chatWhatsAppService) ListarMensagens(ctx context.Context, accountID, ch
 }
 
 // ProcessarMensagemRecebida processa uma mensagem recebida do WhatsApp
-func (s *chatWhatsAppService) ProcessarMensagemRecebida(ctx context.Context, evolutionInstance, remoteJid, texto string) error {
-	// 🔹 1. Buscar o chat com base na instância da Evolution
-	chat, err := s.chatRepo.GetActiveByEvolutionInstance(ctx, evolutionInstance)
+func (s *chatWhatsAppService) ProcessarMensagemRecebida(ctx context.Context, instanceName, remoteJid, texto string) error {
+	// 🔹 1. Buscar o chat com base na instância da GetActiveByInstanceName
+	chat, err := s.chatRepo.GetActiveByInstanceName(ctx, instanceName)
 	if err != nil {
-		return fmt.Errorf("nenhum chat ativo com evolution_instance=%s: %w", evolutionInstance, err)
+		return fmt.Errorf("nenhum chat ativo com instance_name=%s: %w", instanceName, err)
 	}
 
 	// 🔹 2. Extrair número do remoteJid (ex: 554999999999@...)
@@ -329,14 +330,14 @@ func (s *chatWhatsAppService) IniciarSessaoWhatsApp(ctx context.Context, account
 		return nil, fmt.Errorf("chat não encontrado: %w", err)
 	}
 
-	s.log.Debug("Iniciando sessão do WhatsApp", slog.String("evolution_instance", chat.EvolutionInstance), slog.String("webhook_url", chat.WebhookURL))
+	s.log.Debug("Iniciando sessão do WhatsApp", slog.String("instance_name", chat.InstanceName), slog.String("webhook_url", chat.WebhookURL))
 	// Verifica se a instância e o webhook estão configurados
 
-	if chat.EvolutionInstance == "" || chat.WebhookURL == "" {
-		return nil, fmt.Errorf("chat está sem evolution_instance ou webhook_url configurado")
+	if chat.InstanceName == "" || chat.WebhookURL == "" {
+		return nil, fmt.Errorf("chat está sem instance_name ou webhook_url configurado")
 	}
 
-	return s.baileysService.StartSession(chat.EvolutionInstance, chat.WebhookURL)
+	return s.baileysService.StartSession(chat.InstanceName, chat.WebhookURL)
 }
 
 // ObterQRCodeSessao obtém o QR Code para autenticação da sessão do WhatsApp
@@ -346,9 +347,35 @@ func (s *chatWhatsAppService) ObterQRCodeSessao(ctx context.Context, accountID, 
 		return nil, fmt.Errorf("chat não encontrado: %w", err)
 	}
 
-	if chat.EvolutionInstance == "" {
-		return nil, fmt.Errorf("chat está sem evolution_instance configurado")
+	if chat.InstanceName == "" {
+		return nil, fmt.Errorf("chat está sem instance_name configurado")
 	}
 
-	return s.baileysService.GetQRCode(chat.EvolutionInstance)
+	return s.baileysService.GetQRCode(chat.InstanceName)
+}
+
+// VerificarSessionStatusViaAPI consulta o status da sessão e atualiza no banco
+func (s *chatWhatsAppService) VerificarSessionStatusViaAPI(ctx context.Context, accountID, chatID uuid.UUID) (*dto.SessionStatusDTO, error) {
+	chat, err := s.chatRepo.GetByID(ctx, accountID, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("chat não encontrado: %w", err)
+	}
+
+	if chat.InstanceName == "" {
+		return nil, fmt.Errorf("chat está sem instance_name configurado")
+	}
+
+	sessionStatus, err := s.baileysService.GetSessionState(chat.InstanceName)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao obter status da sessão: %w", err)
+	}
+
+	if chat.SessionStatus != sessionStatus.Status {
+		err = s.chatRepo.UpdateSessionStatus(ctx, chat.ID, sessionStatus.Status)
+		if err != nil {
+			return nil, fmt.Errorf("erro ao atualizar status da sessão no banco: %w", err)
+		}
+	}
+
+	return sessionStatus, nil
 }

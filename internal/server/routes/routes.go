@@ -49,7 +49,7 @@ func NewRouter(
 	// 🔥 Registrar rotas do WhatsApp
 	// evolutionService := service.NewEvolutionService()
 	baileysService := service.NewWhatsAppBaileysService(os.Getenv("WHATSAPP_API_URL"), os.Getenv("WHATSAPP_API_KEY"))
-	chatService := service.NewChatWhatsAppService(chatRepo, contactRepo, chatContactRepo, chatMessageRepo, openAIService, *baileysService)
+	chatService := service.NewChatWhatsAppService(chatRepo, contactRepo, chatContactRepo, chatMessageRepo, openAIService, baileysService)
 	RegisterChatRoutes(mux, authMiddleware, chatRepo, contactRepo, chatContactRepo, chatMessageRepo, openAIService, chatService)
 	RegisterWebhookRoutes(mux, chatService)
 

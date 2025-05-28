@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
@@ -27,16 +28,14 @@ func (r *chatRepository) Insert(ctx context.Context, chat *models.Chat) (*models
 	query := `
 		INSERT INTO chats (
 			id, account_id, department, title, instructions,
-			phone_number, evolution_instance, webhook_url,
-			status, created_at, updated_at
+			phone_number, instance_name, webhook_url
 		) VALUES (
 			$1, $2, $3, $4, $5,
-			$6, $7, $8,
-			$9, $10, $11
+			$6, $7, $8
 		)
 		RETURNING id, account_id, department, title, instructions,
-		          phone_number, evolution_instance, webhook_url,
-		          status, created_at, updated_at
+		          phone_number, instance_name, webhook_url,
+		          status, session_status, created_at, updated_at
 	`
 
 	var inserted models.Chat
@@ -47,11 +46,8 @@ func (r *chatRepository) Insert(ctx context.Context, chat *models.Chat) (*models
 		chat.Title,
 		chat.Instructions,
 		chat.PhoneNumber,
-		chat.EvolutionInstance,
+		chat.InstanceName,
 		chat.WebhookURL,
-		chat.Status,
-		chat.CreatedAt,
-		chat.UpdatedAt,
 	).Scan(
 		&inserted.ID,
 		&inserted.AccountID,
@@ -59,9 +55,10 @@ func (r *chatRepository) Insert(ctx context.Context, chat *models.Chat) (*models
 		&inserted.Title,
 		&inserted.Instructions,
 		&inserted.PhoneNumber,
-		&inserted.EvolutionInstance,
+		&inserted.InstanceName,
 		&inserted.WebhookURL,
 		&inserted.Status,
+		&inserted.SessionStatus,
 		&inserted.CreatedAt,
 		&inserted.UpdatedAt,
 	)
@@ -76,8 +73,8 @@ func (r *chatRepository) Insert(ctx context.Context, chat *models.Chat) (*models
 func (r *chatRepository) ListByAccountID(ctx context.Context, accountID uuid.UUID) ([]*models.Chat, error) {
 	query := `
 		SELECT id, account_id, department, title, instructions,
-		       phone_number, evolution_instance, webhook_url,
-		       status, created_at, updated_at
+		       phone_number, instance_name, webhook_url,
+		       status, session_status, created_at, updated_at
 		FROM chats
 		WHERE account_id = $1
 		ORDER BY title ASC
@@ -99,9 +96,10 @@ func (r *chatRepository) ListByAccountID(ctx context.Context, accountID uuid.UUI
 			&chat.Title,
 			&chat.Instructions,
 			&chat.PhoneNumber,
-			&chat.EvolutionInstance,
+			&chat.InstanceName,
 			&chat.WebhookURL,
 			&chat.Status,
+			&chat.SessionStatus,
 			&chat.CreatedAt,
 			&chat.UpdatedAt,
 		); err != nil {
@@ -117,8 +115,8 @@ func (r *chatRepository) ListByAccountID(ctx context.Context, accountID uuid.UUI
 func (r *chatRepository) GetByID(ctx context.Context, accountID, chatID uuid.UUID) (*models.Chat, error) {
 	query := `
 		SELECT id, account_id, department, title, instructions,
-		       phone_number, evolution_instance, webhook_url,
-		       status, created_at, updated_at
+		       phone_number, instance_name, webhook_url,
+		       status, session_status, created_at, updated_at
 		FROM chats
 		WHERE account_id = $1 AND id = $2
 		LIMIT 1
@@ -132,9 +130,10 @@ func (r *chatRepository) GetByID(ctx context.Context, accountID, chatID uuid.UUI
 		&chat.Title,
 		&chat.Instructions,
 		&chat.PhoneNumber,
-		&chat.EvolutionInstance,
+		&chat.InstanceName,
 		&chat.WebhookURL,
 		&chat.Status,
+		&chat.SessionStatus,
 		&chat.CreatedAt,
 		&chat.UpdatedAt,
 	)
@@ -148,10 +147,10 @@ func (r *chatRepository) GetByID(ctx context.Context, accountID, chatID uuid.UUI
 func (r *chatRepository) GetActiveByID(ctx context.Context, accountID, chatID uuid.UUID) (*models.Chat, error) {
 	query := `
 		SELECT id, account_id, department, title, instructions,
-		       phone_number, evolution_instance, webhook_url,
-		       status, created_at, updated_at
+		       phone_number, instance_name, webhook_url,
+		       status, session_status, created_at, updated_at
 		FROM chats
-		WHERE account_id = $1 AND id = $2 AND status = 'ativo'
+		WHERE account_id = $1 AND id = $2 AND session_status = 'ativo'
 		LIMIT 1
 	`
 
@@ -165,9 +164,10 @@ func (r *chatRepository) GetActiveByID(ctx context.Context, accountID, chatID uu
 		&chat.Title,
 		&chat.Instructions,
 		&chat.PhoneNumber,
-		&chat.EvolutionInstance,
+		&chat.InstanceName,
 		&chat.WebhookURL,
 		&chat.Status,
+		&chat.SessionStatus,
 		&chat.CreatedAt,
 		&chat.UpdatedAt,
 	)
@@ -182,10 +182,10 @@ func (r *chatRepository) GetActiveByID(ctx context.Context, accountID, chatID uu
 func (r *chatRepository) GetActiveByDepartment(ctx context.Context, accountID, department string) (*models.Chat, error) {
 	query := `
 		SELECT id, account_id, department, title, instructions,
-		       phone_number, evolution_instance, webhook_url,
-		       status, created_at, updated_at
+		       phone_number, instance_name, webhook_url,
+		       status, session_status, created_at, updated_at
 		FROM chats
-		WHERE account_id = $1 AND department = $2 AND status = 'ativo'
+		WHERE account_id = $1 AND department = $2 AND session_status = 'ativo'
 		LIMIT 1
 	`
 
@@ -197,9 +197,10 @@ func (r *chatRepository) GetActiveByDepartment(ctx context.Context, accountID, d
 		&chat.Title,
 		&chat.Instructions,
 		&chat.PhoneNumber,
-		&chat.EvolutionInstance,
+		&chat.InstanceName,
 		&chat.WebhookURL,
 		&chat.Status,
+		&chat.SessionStatus,
 		&chat.CreatedAt,
 		&chat.UpdatedAt,
 	)
@@ -217,13 +218,13 @@ func (r *chatRepository) Update(ctx context.Context, chat *models.Chat) (*models
 		SET title = $1,
 		    instructions = $2,
 		    phone_number = $3,
-		    evolution_instance = $4,
+		    instance_name = $4,
 		    webhook_url = $5,
 		    updated_at = $6
 		WHERE id = $7 AND account_id = $8
 		RETURNING id, account_id, department, title, instructions,
-		          phone_number, evolution_instance, webhook_url,
-		          status, created_at, updated_at
+		          phone_number, instance_name, webhook_url,
+		          status, session_status, created_at, updated_at
 	`
 
 	var updated models.Chat
@@ -231,7 +232,7 @@ func (r *chatRepository) Update(ctx context.Context, chat *models.Chat) (*models
 		chat.Title,
 		chat.Instructions,
 		chat.PhoneNumber,
-		chat.EvolutionInstance,
+		chat.InstanceName,
 		chat.WebhookURL,
 		chat.UpdatedAt,
 		chat.ID,
@@ -243,9 +244,10 @@ func (r *chatRepository) Update(ctx context.Context, chat *models.Chat) (*models
 		&updated.Title,
 		&updated.Instructions,
 		&updated.PhoneNumber,
-		&updated.EvolutionInstance,
+		&updated.InstanceName,
 		&updated.WebhookURL,
 		&updated.Status,
+		&updated.SessionStatus,
 		&updated.CreatedAt,
 		&updated.UpdatedAt,
 	)
@@ -256,13 +258,13 @@ func (r *chatRepository) Update(ctx context.Context, chat *models.Chat) (*models
 	return &updated, nil
 }
 
-// GetActiveByEvolutionInstance retrieves an active chat by its Evolution instance.
-func (r *chatRepository) GetActiveByEvolutionInstance(ctx context.Context, instance string) (*models.Chat, error) {
+// GetActiveByInstanceName retrieves an active chat by its Evolution instance.
+func (r *chatRepository) GetActiveByInstanceName(ctx context.Context, instance string) (*models.Chat, error) {
 	query := `
 		SELECT id, account_id, department, title, instructions, phone_number,
-		       evolution_instance, webhook_url, status, created_at, updated_at
+		       instance_name, webhook_url, session_status, created_at, updated_at
 		FROM chats
-		WHERE evolution_instance = $1 AND status = 'ativo'
+		WHERE instance_name = $1 AND session_status = 'ativo'
 		LIMIT 1
 	`
 
@@ -274,9 +276,9 @@ func (r *chatRepository) GetActiveByEvolutionInstance(ctx context.Context, insta
 		&chat.Title,
 		&chat.Instructions,
 		&chat.PhoneNumber,
-		&chat.EvolutionInstance,
+		&chat.InstanceName,
 		&chat.WebhookURL,
-		&chat.Status,
+		&chat.SessionStatus,
 		&chat.CreatedAt,
 		&chat.UpdatedAt,
 	)
@@ -285,4 +287,20 @@ func (r *chatRepository) GetActiveByEvolutionInstance(ctx context.Context, insta
 	}
 
 	return &chat, nil
+}
+
+// UpdateSessionStatus updates the session status of a chat.
+func (r *chatRepository) UpdateSessionStatus(ctx context.Context, chatID uuid.UUID, sessionStatus string) error {
+	query := `
+		UPDATE chats
+		SET session_status = $1, updated_at = $2
+		WHERE id = $3
+	`
+
+	_, err := r.db.ExecContext(ctx, query, sessionStatus, time.Now(), chatID)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

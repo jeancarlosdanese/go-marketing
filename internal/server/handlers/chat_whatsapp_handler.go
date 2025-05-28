@@ -26,6 +26,7 @@ type ChatWhatsAppHandler interface {
 	SugerirResposta() http.HandlerFunc
 	IniciarSessaoWhatsApp() http.HandlerFunc
 	ObterQrCodeHandler() http.HandlerFunc
+	VerificarStatusSessao() http.HandlerFunc
 }
 
 type chatWhatsAppHandler struct {
@@ -296,5 +297,32 @@ func (h *chatWhatsAppHandler) ObterQrCodeHandler() http.HandlerFunc {
 		}
 
 		json.NewEncoder(w).Encode(result)
+	}
+}
+
+// VerificarStatusSessao verifica o status da sessão do WhatsApp
+func (h *chatWhatsAppHandler) VerificarStatusSessao() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		account := middleware.GetAuthAccountOrFail(ctx, w, h.log)
+		if account == nil {
+			return
+		}
+
+		chatID := utils.GetUUIDFromRequestPath(r, w, "chat_id")
+		if chatID == uuid.Nil {
+			return
+		}
+
+		// 🔹 Consulta status no whatsapp-api
+		sessionStatus, err := h.chatWhatsAppService.VerificarSessionStatusViaAPI(ctx, account.ID, chatID)
+		if err != nil {
+			h.log.Error("Erro ao verificar status no whatsapp-api", slog.String("erro", err.Error()))
+			utils.SendError(w, 500, "Erro ao verificar status")
+			return
+		}
+
+		// 🔹 Retorna status atualizado
+		utils.SendSuccess(w, 200, sessionStatus)
 	}
 }

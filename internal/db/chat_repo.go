@@ -16,5 +16,6 @@ type ChatRepository interface {
 	Update(ctx context.Context, chat *models.Chat) (*models.Chat, error)
 	GetActiveByID(ctx context.Context, accountID, chatID uuid.UUID) (*models.Chat, error)
 	GetActiveByDepartment(ctx context.Context, accountID, department string) (*models.Chat, error)
-	GetActiveByEvolutionInstance(ctx context.Context, instance string) (*models.Chat, error)
+	GetActiveByInstanceName(ctx context.Context, instance string) (*models.Chat, error)
+	UpdateSessionStatus(ctx context.Context, chatID uuid.UUID, sessionStatus string) error
 }

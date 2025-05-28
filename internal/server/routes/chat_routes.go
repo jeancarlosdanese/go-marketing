@@ -29,6 +29,8 @@ func RegisterChatRoutes(
 	mux.Handle("GET /chats/{chat_id}", authMiddleware(chatHandler.GetChatByID()))
 	mux.Handle("PUT /chats/{chat_id}", authMiddleware(chatHandler.UpdateChat()))
 
+	mux.Handle("GET /chats/{chat_id}/status", authMiddleware(chatHandler.VerificarStatusSessao()))
+
 	mux.Handle("GET /chats/{chat_id}/contatos", authMiddleware(chatHandler.ListarContatosDoChat()))
 	mux.Handle("POST /chats/{chat_id}/contatos/{contact_id}/mensagens", authMiddleware(chatHandler.RegistrarMensagem()))
 	mux.Handle("GET /chats/{chat_id}/contatos/{contact_id}/mensagens", authMiddleware(chatHandler.ListarMensagens()))

@@ -10,12 +10,12 @@ import (
 )
 
 type ChatCreateDTO struct {
-	Department        string `json:"department"` // financeiro, comercial, suporte
-	Title             string `json:"title"`
-	Instructions      string `json:"instructions"`
-	PhoneNumber       string `json:"phone_number"`
-	EvolutionInstance string `json:"evolution_instance"`
-	WebhookURL        string `json:"webhook_url"`
+	Department   string `json:"department"` // financeiro, comercial, suporte
+	Title        string `json:"title"`
+	Instructions string `json:"instructions"`
+	PhoneNumber  string `json:"phone_number"`
+	InstanceName string `json:"instance_name"`
+	WebhookURL   string `json:"webhook_url"`
 }
 
 // Validate valida os dados do ContactCreateDTO
@@ -36,7 +36,7 @@ func (c *ChatCreateDTO) Validate() error {
 		return errors.New("o número de telefone deve ser um número válido")
 	}
 
-	if c.EvolutionInstance == "" || len(c.EvolutionInstance) < 3 || len(c.EvolutionInstance) > 50 {
+	if c.InstanceName == "" || len(c.InstanceName) < 3 || len(c.InstanceName) > 50 {
 		return errors.New("a instância de evolução deve ter entre 3 e 50 caracteres")
 	}
 
@@ -53,21 +53,21 @@ func (c *ChatCreateDTO) ToModel() *models.Chat {
 	phoneNumber := utils.FormatWhatsApp(c.PhoneNumber)
 
 	return &models.Chat{
-		Department:        c.Department,
-		Title:             c.Title,
-		Instructions:      c.Instructions,
-		PhoneNumber:       phoneNumber,
-		EvolutionInstance: c.EvolutionInstance,
-		WebhookURL:        c.WebhookURL,
+		Department:   c.Department,
+		Title:        c.Title,
+		Instructions: c.Instructions,
+		PhoneNumber:  phoneNumber,
+		InstanceName: c.InstanceName,
+		WebhookURL:   c.WebhookURL,
 	}
 }
 
 type ChatUpdateDTO struct {
-	Title             string `json:"title"`
-	Instructions      string `json:"instructions"`
-	PhoneNumber       string `json:"phone_number"`
-	EvolutionInstance string `json:"evolution_instance"`
-	WebhookURL        string `json:"webhook_url"`
+	Title        string `json:"title"`
+	Instructions string `json:"instructions"`
+	PhoneNumber  string `json:"phone_number"`
+	InstanceName string `json:"instance_name"`
+	WebhookURL   string `json:"webhook_url"`
 }
 
 // Validate valida os dados do ChatUpdateDTO
@@ -81,11 +81,19 @@ func (c *ChatUpdateDTO) Validate() error {
 	if c.PhoneNumber == "" || utils.ValidateWhatsApp(c.PhoneNumber) != nil {
 		return errors.New("o número de telefone deve ser válido")
 	}
-	if c.EvolutionInstance == "" || len(c.EvolutionInstance) < 3 || len(c.EvolutionInstance) > 50 {
+	if c.InstanceName == "" || len(c.InstanceName) < 3 || len(c.InstanceName) > 50 {
 		return errors.New("a instância de evolução deve ter entre 3 e 50 caracteres")
 	}
 	if c.WebhookURL == "" || len(c.WebhookURL) < 3 || len(c.WebhookURL) > 255 {
 		return errors.New("a URL do webhook deve ter entre 3 e 255 caracteres")
 	}
 	return nil
+}
+
+type SessionStatusDTO struct {
+	Status          string `json:"status"`           // Ex: "conectado", "aguardando_qrcode", "desconectado"
+	Connected       bool   `json:"connected"`        // true se conectado com sucesso
+	QRCodeAvailable bool   `json:"qrCodeAvailable"`  // true se o QRCode está disponível para escanear
+	QRCode          string `json:"qrCode,omitempty"` // imagem base64 (se aplicável)
+	Message         string `json:"message"`          // texto de status amigável
 }
