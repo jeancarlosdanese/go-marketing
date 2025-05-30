@@ -96,14 +96,6 @@ func ExtractPaginationParams(r *http.Request) (int, int, string) {
 	return page, perPage, sort
 }
 
-// ExtractWhatsAppNumber extrai o número do WhatsApp do JID remoto
-func ExtractWhatsAppNumber(remoteJid string) string {
-	if strings.Contains(remoteJid, "@") {
-		return strings.Split(remoteJid, "@")[0]
-	}
-	return remoteJid
-}
-
 // removeAccents remove acentos mantendo as letras originais
 func removeAccents(input string) string {
 	accents := map[rune]rune{

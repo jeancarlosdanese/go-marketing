@@ -92,8 +92,8 @@ func (c *CampaignSettingsDTO) Normalize() {
 	c.EmailFrom = *utils.NormalizeEmail(&c.EmailFrom)
 	c.EmailReply = *utils.NormalizeEmail(&c.EmailReply)
 	c.EmailInstructions = strings.TrimSpace(c.EmailInstructions)
-	c.WhatsAppFrom = *utils.FormatWhatsAppOnlyNumbers(&c.WhatsAppFrom)
-	c.WhatsAppReply = *utils.FormatWhatsAppOnlyNumbers(&c.WhatsAppReply)
+	c.WhatsAppFrom = utils.NormalizeWhatsAppNumber(c.WhatsAppFrom)
+	c.WhatsAppReply = utils.NormalizeWhatsAppNumber(c.WhatsAppReply)
 	c.WhatsAppInstructions = strings.TrimSpace(c.WhatsAppInstructions)
 }
 

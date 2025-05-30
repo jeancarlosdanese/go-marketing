@@ -3,10 +3,11 @@
 package utils
 
 import (
+	"fmt"
 	"strings"
 	"time"
-	"unicode"
 
+	"github.com/nyaruka/phonenumbers"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -42,29 +43,62 @@ func SanitizeEmail(email *string) *string {
 	return &cleaned
 }
 
-// SanitizeWhatsApp remove todos os caracteres não numéricos do telefone
-func SanitizeWhatsApp(phone *string) *string {
-	if phone == nil {
-		return nil
-	}
-	var result strings.Builder
-	for _, r := range *phone {
-		if unicode.IsDigit(r) {
-			result.WriteRune(r)
-		}
-	}
-	cleaned := result.String()
+// GetWhatsAppNumber extrai o número de telefone do JID do WhatsApp
+func GetWhatsAppOnlyNumber(jid string) string {
+	jid = strings.TrimSpace(jid)
+	jid = strings.TrimPrefix(jid, "+")
+	jid = strings.ReplaceAll(jid, " ", "")
+	jid = strings.TrimSuffix(jid, "@s.whatsapp.net")
+	jid = OnlyDigits(jid)
 
-	// Ajustando formato para 11 dígitos (Brasil)
-	if len(cleaned) == 10 { // Caso sem o nono dígito
-		cleaned = cleaned[:2] + "9" + cleaned[2:]
-	} else if len(cleaned) != 11 {
-		return nil // Retorna nil se o número não for válido
+	return jid // Retorna como está se não for o formato esperado
+}
+
+func NormalizeWhatsAppNumber(jid string) string {
+	jid = GetWhatsAppOnlyNumber(jid)
+
+	// Ex: 554999669869 → DDI: 55, DDD: 49, número: 99669869
+	if len(jid) == 12 { // Ex: 55 49 99669869 (sem o 9)
+		ddi := jid[:2]
+		ddd := jid[2:4]
+		num := jid[4:]
+
+		// Insere o nono dígito (9) após o DDD
+		num = "9" + num
+
+		return ddi + ddd + num // 5549999669869
 	}
 
-	// Adiciona o código do Brasil
-	cleaned = "+55 " + cleaned
-	return &cleaned
+	return jid // Retorna como está se não for o formato esperado
+}
+
+// ParsePhone valida e formata um número de telefone brasileiro
+func ParsePhone(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+
+	var num *phonenumbers.PhoneNumber
+	var err error
+
+	switch {
+	case strings.HasPrefix(raw, "+"):
+		num, err = phonenumbers.Parse(raw, "")
+	case strings.HasPrefix(raw, "55"):
+		num, err = phonenumbers.Parse("+"+raw, "")
+	default:
+		num, err = phonenumbers.Parse(raw, "BR")
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("parse error: %w", err)
+	}
+
+	if !phonenumbers.IsPossibleNumber(num) {
+		return "", fmt.Errorf("número impossível")
+	}
+
+	// Sucesso: retorna 5549999669869
+	e164 := phonenumbers.Format(num, phonenumbers.E164)
+	return strings.TrimPrefix(e164, "+"), nil
 }
 
 // NormalizeGender normaliza e valida o gênero (masculino, feminino, outro)
@@ -95,4 +129,15 @@ func NormalizeBirthDate(date *string) *string {
 		return nil
 	}
 	return date
+}
+
+// NormalizeEmail normaliza um e-mail para minúsculas e remove espaços extras
+func NormalizeEmail(email *string) *string {
+	if email == nil || *email == "" {
+		return nil
+	}
+
+	normalizedEmail := strings.ToLower(strings.TrimSpace(*email))
+
+	return &normalizedEmail
 }

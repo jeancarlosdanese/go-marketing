@@ -27,11 +27,11 @@ func NewChatRepository(db *sql.DB) db.ChatRepository {
 func (r *chatRepository) Insert(ctx context.Context, chat *models.Chat) (*models.Chat, error) {
 	query := `
 		INSERT INTO chats (
-			id, account_id, department, title, instructions,
+			account_id, department, title, instructions,
 			phone_number, instance_name, webhook_url
 		) VALUES (
 			$1, $2, $3, $4, $5,
-			$6, $7, $8
+			$6, $7
 		)
 		RETURNING id, account_id, department, title, instructions,
 		          phone_number, instance_name, webhook_url,
@@ -40,7 +40,6 @@ func (r *chatRepository) Insert(ctx context.Context, chat *models.Chat) (*models
 
 	var inserted models.Chat
 	err := r.db.QueryRowContext(ctx, query,
-		chat.ID,
 		chat.AccountID,
 		chat.Department,
 		chat.Title,
@@ -150,7 +149,7 @@ func (r *chatRepository) GetActiveByID(ctx context.Context, accountID, chatID uu
 		       phone_number, instance_name, webhook_url,
 		       status, session_status, created_at, updated_at
 		FROM chats
-		WHERE account_id = $1 AND id = $2 AND session_status = 'ativo'
+		WHERE account_id = $1 AND id = $2 AND status = 'ativo'
 		LIMIT 1
 	`
 
@@ -185,7 +184,7 @@ func (r *chatRepository) GetActiveByDepartment(ctx context.Context, accountID, d
 		       phone_number, instance_name, webhook_url,
 		       status, session_status, created_at, updated_at
 		FROM chats
-		WHERE account_id = $1 AND department = $2 AND session_status = 'ativo'
+		WHERE account_id = $1 AND department = $2 AND status = 'ativo'
 		LIMIT 1
 	`
 
@@ -262,11 +261,13 @@ func (r *chatRepository) Update(ctx context.Context, chat *models.Chat) (*models
 func (r *chatRepository) GetActiveByInstanceName(ctx context.Context, instance string) (*models.Chat, error) {
 	query := `
 		SELECT id, account_id, department, title, instructions, phone_number,
-		       instance_name, webhook_url, session_status, created_at, updated_at
+		       instance_name, webhook_url, status, session_status, created_at, updated_at
 		FROM chats
-		WHERE instance_name = $1 AND session_status = 'ativo'
+		WHERE instance_name = $1 AND status = 'ativo'
 		LIMIT 1
 	`
+
+	r.log.Debug("Executing query: %s, with params: %v", query, []interface{}{instance})
 
 	var chat models.Chat
 	err := r.db.QueryRowContext(ctx, query, instance).Scan(
@@ -278,6 +279,7 @@ func (r *chatRepository) GetActiveByInstanceName(ctx context.Context, instance s
 		&chat.PhoneNumber,
 		&chat.InstanceName,
 		&chat.WebhookURL,
+		&chat.Status,
 		&chat.SessionStatus,
 		&chat.CreatedAt,
 		&chat.UpdatedAt,

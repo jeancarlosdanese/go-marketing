@@ -40,8 +40,8 @@ func (h *webhookHandler) Handle() http.HandlerFunc {
 		tee := io.TeeReader(r.Body, &rawBody)
 		defer r.Body.Close()
 
-		var payload dto.WebhookBaileysPayload
-		if err := json.NewDecoder(tee).Decode(&payload); err != nil {
+		var webhookPayload *dto.WebhookBaileysPayload
+		if err := json.NewDecoder(tee).Decode(&webhookPayload); err != nil {
 			h.log.Error("❌ Payload inválido no webhook", slog.Any("erro", err))
 			utils.SendError(w, 400, "Payload inválido")
 			return
@@ -50,27 +50,9 @@ func (h *webhookHandler) Handle() http.HandlerFunc {
 		// Log do JSON cru
 		h.log.Debug("🔍 Payload cru recebido", slog.String("body", rawBody.String()))
 
-		numero := payload.From
-		msg := payload.Message
-		msgType := payload.Type
-		instancia := payload.SessionID
-
-		h.log.Info("📩 Webhook recebido",
-			slog.String("instancia", instancia),
-			slog.String("numero", numero),
-			slog.String("tipo", msgType),
-			slog.String("mensagem", msg),
-		)
-
-		if msgType != "text" || msg == "" {
-			h.log.Warn("Mensagem ignorada: tipo inválido ou vazia")
-			utils.SendSuccess(w, 200, map[string]string{"status": "ignorada"})
-			return
-		}
-
 		// 🔧 Processamento principal
 		go func() {
-			if err := h.chatSvc.ProcessarMensagemRecebida(context.Background(), instancia, numero, msg); err != nil {
+			if err := h.chatSvc.ProcessarMensagemRecebida(context.Background(), webhookPayload); err != nil {
 				h.log.Error("Erro ao processar mensagem recebida", slog.Any("err", err))
 			}
 		}()

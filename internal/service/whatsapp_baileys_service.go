@@ -13,13 +13,15 @@ import (
 
 	"github.com/jeancarlosdanese/go-marketing/internal/dto"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
+	"github.com/jeancarlosdanese/go-marketing/internal/utils"
 )
 
 type WhatsAppBaileysService interface {
 	StartSession(sessionID, webhookURL string) (*StartSessionResponse, error)
 	GetQRCode(sessionID string) (*QRCodeResponse, error)
-	SendTextMessage(sessionID, number, message string) (*SendMessageResponse, error)
+	SendTextMessage(sessionID, jid, message string) (*SendMessageResponse, error)
 	GetSessionState(sessionID string) (*dto.SessionStatusDTO, error)
+	ResolveNumber(sessionID, normalizedNumber string) (*dto.ResolveNumberResponse, error)
 }
 
 type whatsAppBaileysService struct {
@@ -130,8 +132,9 @@ func (s *whatsAppBaileysService) GetQRCode(sessionID string) (*QRCodeResponse, e
 }
 
 // SendTextMessage envia uma mensagem de texto para um número específico
-func (s *whatsAppBaileysService) SendTextMessage(sessionID, number, message string) (*SendMessageResponse, error) {
+func (s *whatsAppBaileysService) SendTextMessage(sessionID, jid, message string) (*SendMessageResponse, error) {
 	url := fmt.Sprintf("%s/sessions/%s/send", s.apiURL, sessionID)
+	number := utils.GetWhatsAppOnlyNumber(jid)
 
 	payload := SendMessageRequest{
 		Number: number,
@@ -191,7 +194,6 @@ func (s *whatsAppBaileysService) GetSessionState(sessionID string) (*dto.Session
 		s.log.Error("Erro ao ler o corpo da resposta", slog.Any("error", err))
 		return nil, fmt.Errorf("erro ao ler corpo da resposta: %w", err)
 	}
-	s.log.Debug("BODY DA RESPOSTA", slog.Any("body", string(bodyBytes)))
 
 	var sessionStatus *dto.SessionStatusDTO
 	if err := json.Unmarshal(bodyBytes, &sessionStatus); err != nil {
@@ -200,4 +202,34 @@ func (s *whatsAppBaileysService) GetSessionState(sessionID string) (*dto.Session
 	}
 
 	return sessionStatus, nil
+}
+
+// ResolveNumber consulta o número e retorna informações sobre ele
+func (s *whatsAppBaileysService) ResolveNumber(sessionID, normalizedNumber string) (*dto.ResolveNumberResponse, error) {
+	url := fmt.Sprintf("%s/sessions/%s/resolve-number/%s", s.apiURL, sessionID, normalizedNumber)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao criar request: %w", err)
+	}
+	req.Header.Set("X-API-Key", s.apiKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("erro na requisição: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao ler resposta: %w", err)
+	}
+
+	var data dto.ResolveNumberResponse
+	if err := json.Unmarshal(bodyBytes, &data); err != nil {
+		return nil, fmt.Errorf("erro ao decodificar JSON: %w", err)
+	}
+
+	return &data, nil
 }

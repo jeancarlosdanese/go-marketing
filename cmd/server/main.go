@@ -50,6 +50,7 @@ func main() {
 	accountRepo := postgres.NewAccountRepository(dbConn)
 	accountSettingsRepo := postgres.NewAccountSettingsRepository(dbConn)
 	contactRepo := postgres.NewContactRepository(dbConn)
+	whatsappContactRepo := postgres.NewWhatsappContactRepository(dbConn)
 	templateRepo := postgres.NewTemplateRepository(dbConn)
 	campaignRepo := postgres.NewCampaignRepository(dbConn)
 	audienceRepo := postgres.NewCampaignAudienceRepository(dbConn)
@@ -94,7 +95,7 @@ func main() {
 
 	// 🔥 Aplica CORS a todas as rotas
 	router := middleware.CORSMiddleware(routes.NewRouter(
-		otpRepo, accountRepo, accountSettingsRepo, contactRepo,
+		otpRepo, accountRepo, accountSettingsRepo, contactRepo, whatsappContactRepo,
 		templateRepo, campaignRepo, audienceRepo, campaignSettingsRepo,
 		openAIService, campaignProcessor, contactImportRepo,
 		campaignMessageRepo, chatRepo, chatContactRepo, chatMessageRepo,

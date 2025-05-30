@@ -14,7 +14,7 @@ func CORSMiddleware(next http.Handler) http.Handler {
 
 	log.Debug("Adicionando middleware CORS")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Debug("Middleware CORS", "method", r.Method, "path", r.URL.Path)
+		// log.Debug("Middleware CORS", "method", r.Method, "path", r.URL.Path)
 
 		// 🔥 Permitir chamadas do frontend no localhost
 		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
@@ -30,7 +30,7 @@ func CORSMiddleware(next http.Handler) http.Handler {
 
 		// ✅ Responder diretamente às requisições OPTIONS (preflight)
 		if r.Method == http.MethodOptions {
-			log.Debug("CORS: Respondendo OPTIONS com 204 No Content", "path", r.URL.Path)
+			// log.Debug("CORS: Respondendo OPTIONS com 204 No Content", "path", r.URL.Path)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}

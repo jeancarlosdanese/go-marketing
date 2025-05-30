@@ -31,12 +31,12 @@ func RegisterChatRoutes(
 
 	mux.Handle("GET /chats/{chat_id}/status", authMiddleware(chatHandler.VerificarStatusSessao()))
 
-	mux.Handle("GET /chats/{chat_id}/contatos", authMiddleware(chatHandler.ListarContatosDoChat()))
-	mux.Handle("POST /chats/{chat_id}/contatos/{contact_id}/mensagens", authMiddleware(chatHandler.RegistrarMensagem()))
-	mux.Handle("GET /chats/{chat_id}/contatos/{contact_id}/mensagens", authMiddleware(chatHandler.ListarMensagens()))
+	mux.Handle("GET /chats/{chat_id}/chat-contacts", authMiddleware(chatHandler.ListarContatosDoChat()))
+	mux.Handle("POST /chats/{chat_id}/chat-contacts/{chat_contact_id}/messages", authMiddleware(chatHandler.RegistrarMensagem()))
+	mux.Handle("GET /chats/{chat_id}/chat-contacts/{chat_contact_id}/messages", authMiddleware(chatHandler.ListarMensagens()))
 
-	mux.Handle("POST /chat/sugerir-resposta", authMiddleware(chatHandler.SugerirResposta()))
+	mux.Handle("POST /chats/{chat_id}/chat-contacts/{chat_contact_id}/suggestion-ai", authMiddleware(chatHandler.SugestaoRespostaAI()))
 
-	mux.Handle("POST /chats/{chat_id}/iniciar-sessao", authMiddleware(chatHandler.IniciarSessaoWhatsApp()))
+	mux.Handle("POST /chats/{chat_id}/session-start", authMiddleware(chatHandler.IniciarSessaoWhatsApp()))
 	mux.Handle("GET /chats/{chat_id}/qrcode", authMiddleware(chatHandler.ObterQrCodeHandler()))
 }

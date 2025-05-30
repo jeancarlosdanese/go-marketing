@@ -37,7 +37,7 @@ func (c *ChatCreateDTO) Validate() error {
 	}
 
 	if c.InstanceName == "" || len(c.InstanceName) < 3 || len(c.InstanceName) > 50 {
-		return errors.New("a instância de evolução deve ter entre 3 e 50 caracteres")
+		return errors.New("o nome da instância deve ter entre 3 e 50 caracteres")
 	}
 
 	if c.WebhookURL == "" || len(c.WebhookURL) < 3 || len(c.WebhookURL) > 255 {
@@ -82,7 +82,7 @@ func (c *ChatUpdateDTO) Validate() error {
 		return errors.New("o número de telefone deve ser válido")
 	}
 	if c.InstanceName == "" || len(c.InstanceName) < 3 || len(c.InstanceName) > 50 {
-		return errors.New("a instância de evolução deve ter entre 3 e 50 caracteres")
+		return errors.New("o nome da instância deve ter entre 3 e 50 caracteres")
 	}
 	if c.WebhookURL == "" || len(c.WebhookURL) < 3 || len(c.WebhookURL) > 255 {
 		return errors.New("a URL do webhook deve ter entre 3 e 255 caracteres")

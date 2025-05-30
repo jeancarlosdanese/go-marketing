@@ -23,7 +23,7 @@ type ChatWhatsAppHandler interface {
 	ListarContatosDoChat() http.HandlerFunc
 	RegistrarMensagem() http.HandlerFunc
 	ListarMensagens() http.HandlerFunc
-	SugerirResposta() http.HandlerFunc
+	SugestaoRespostaAI() http.HandlerFunc
 	IniciarSessaoWhatsApp() http.HandlerFunc
 	ObterQrCodeHandler() http.HandlerFunc
 	VerificarStatusSessao() http.HandlerFunc
@@ -41,14 +41,12 @@ func NewChatWhatsAppHandler(chatWhatsAppService service.ChatWhatsAppService) Cha
 	}
 }
 
-type SugerirRespostaRequest struct {
-	ChatID    string `json:"chat_id"`
-	ContactID string `json:"contact_id"`
-	Mensagem  string `json:"mensagem"`
+type SuggestionRequest struct {
+	Message string `json:"message"`
 }
 
-type SugerirRespostaResponse struct {
-	RespostaSugerida string `json:"resposta_sugerida"`
+type SuggestionResponse struct {
+	SuggestionAI string `json:"suggestion_ai"`
 }
 
 // CreateChat cria um novo chat
@@ -155,14 +153,19 @@ func (h *chatWhatsAppHandler) ListarContatosDoChat() http.HandlerFunc {
 		authAccount := middleware.GetAuthAccountOrFail(ctx, w, h.log)
 		chatID := utils.GetUUIDFromRequestPath(r, w, "chat_id")
 
-		lista, err := h.chatWhatsAppService.ListarContatosComDados(ctx, authAccount.ID, chatID)
+		chatContacts, err := h.chatWhatsAppService.ListarContatosDoChat(ctx, authAccount.ID, chatID)
 		if err != nil {
 			utils.SendError(w, 500, "Erro ao listar contatos do chat")
-			h.log.Error("Erro ao listar contatos do chat", slog.Any("err", err))
+			h.log.Error("Erro ao listar contatos do chat", slog.Any("err", err), slog.String("chat_id", chatID.String()))
+			return
+		}
+		if len(chatContacts) == 0 {
+			utils.SendSuccess(w, 200, []dto.ChatContactFull{})
 			return
 		}
 
-		utils.SendSuccess(w, 200, lista)
+		// 🔹 Retorna contatos do chat
+		utils.SendSuccess(w, 200, chatContacts)
 	}
 }
 
@@ -173,7 +176,7 @@ func (h *chatWhatsAppHandler) RegistrarMensagem() http.HandlerFunc {
 		auth := middleware.GetAuthAccountOrFail(ctx, w, h.log)
 
 		chatID := utils.GetUUIDFromRequestPath(r, w, "chat_id")
-		contactID := utils.GetUUIDFromRequestPath(r, w, "contact_id")
+		chatContactID := utils.GetUUIDFromRequestPath(r, w, "chat_contact_id")
 
 		var req dto.ChatMessageCreateDTO
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -181,7 +184,7 @@ func (h *chatWhatsAppHandler) RegistrarMensagem() http.HandlerFunc {
 			return
 		}
 
-		msg, err := h.chatWhatsAppService.RegistrarMensagemManual(ctx, auth.ID, chatID, contactID, req)
+		msg, err := h.chatWhatsAppService.RegistrarMensagemManual(ctx, auth.ID, chatID, chatContactID, req)
 		if err != nil {
 			utils.SendError(w, 500, "Erro ao registrar mensagem")
 			return
@@ -198,9 +201,9 @@ func (h *chatWhatsAppHandler) ListarMensagens() http.HandlerFunc {
 		auth := middleware.GetAuthAccountOrFail(ctx, w, h.log)
 
 		chatID := utils.GetUUIDFromRequestPath(r, w, "chat_id")
-		contactID := utils.GetUUIDFromRequestPath(r, w, "contact_id")
+		chatContactID := utils.GetUUIDFromRequestPath(r, w, "chat_contact_id")
 
-		mensagens, err := h.chatWhatsAppService.ListarMensagens(ctx, auth.ID, chatID, contactID)
+		mensagens, err := h.chatWhatsAppService.ListarMensagens(ctx, auth.ID, chatID, chatContactID)
 		if err != nil {
 			utils.SendError(w, 500, "Erro ao listar mensagens")
 			return
@@ -210,44 +213,36 @@ func (h *chatWhatsAppHandler) ListarMensagens() http.HandlerFunc {
 	}
 }
 
-// SugerirResposta gera uma resposta sugerida para a mensagem recebida
-func (h *chatWhatsAppHandler) SugerirResposta() http.HandlerFunc {
+// SugestaoRespostaAI gera uma resposta sugerida para a mensagem recebida
+func (h *chatWhatsAppHandler) SugestaoRespostaAI() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 🔍 Buscar conta autenticada
 		authAccount := middleware.GetAuthAccountOrFail(r.Context(), w, h.log)
 
-		var req SugerirRespostaRequest
+		chatID := utils.GetUUIDFromRequestPath(r, w, "chat_id")
+		chatContactID := utils.GetUUIDFromRequestPath(r, w, "chat_contact_id")
+
+		var req SuggestionRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			utils.SendError(w, http.StatusBadRequest, "JSON inválido")
 			return
 		}
 
-		h.log.Debug("request sugerir resposta", slog.String("chat_id", req.ChatID), slog.String("contact_id", req.ContactID), slog.String("mensagem", req.Mensagem))
+		h.log.Debug("request sugerir resposta", slog.String("chat_id", chatID.String()), slog.String("chat_contact_id", chatContactID.String()), slog.String("mensagem", req.Message))
 
-		chatID, err := uuid.Parse(req.ChatID)
-		if err != nil {
-			utils.SendError(w, http.StatusBadRequest, "chat_id inválido")
-			return
-		}
-		contactID, err := uuid.Parse(req.ContactID)
-		if err != nil {
-			utils.SendError(w, http.StatusBadRequest, "contact_id inválido")
-			return
-		}
-
-		resposta, err := h.chatWhatsAppService.SugerirRespostaIA(r.Context(), authAccount.ID, chatID, contactID, req.Mensagem)
+		resposta, err := h.chatWhatsAppService.SugestaoRespostaAI(r.Context(), authAccount.ID, chatID, chatContactID, req.Message)
 		if err != nil {
 			utils.SendError(w, http.StatusInternalServerError, "Erro ao gerar resposta com IA")
 			h.log.Error("erro ao gerar resposta com IA",
 				slog.Any("err", err),
 				slog.String("chat_id", chatID.String()),
-				slog.String("contact_id", contactID.String()),
+				slog.String("contact_id", chatContactID.String()),
 			)
 			return
 		}
 
-		json.NewEncoder(w).Encode(SugerirRespostaResponse{
-			RespostaSugerida: resposta,
+		json.NewEncoder(w).Encode(SuggestionResponse{
+			SuggestionAI: resposta,
 		})
 	}
 }

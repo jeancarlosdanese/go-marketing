@@ -4,8 +4,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,12 +23,11 @@ type ChatWhatsAppService interface {
 	ListarChatsPorConta(ctx context.Context, accountID uuid.UUID) ([]*models.Chat, error)
 	BuscarChatPorID(ctx context.Context, accountID, chatID uuid.UUID) (*models.Chat, error)
 	AtualizarChat(ctx context.Context, accountID, chatID uuid.UUID, data dto.ChatUpdateDTO) (*models.Chat, error)
-	ListarContatosDoChat(ctx context.Context, accountID, chatID uuid.UUID) ([]*models.ChatContact, error)
-	ListarContatosComDados(ctx context.Context, accountID, chatID uuid.UUID) ([]dto.ChatContactResumoDTO, error)
-	RegistrarMensagemManual(ctx context.Context, accountID, chatID, contactID uuid.UUID, chatMessage dto.ChatMessageCreateDTO) (*models.ChatMessage, error)
-	ListarMensagens(ctx context.Context, accountID, chatID, contactID uuid.UUID) ([]*models.ChatMessage, error)
-	SugerirRespostaIA(ctx context.Context, accountID, chatID, contactID uuid.UUID, mensagemRecebida string) (string, error)
-	ProcessarMensagemRecebida(ctx context.Context, instanceName, remoteJid, texto string) error
+	ListarContatosDoChat(ctx context.Context, accountID, chatID uuid.UUID) ([]dto.ChatContactFull, error)
+	RegistrarMensagemManual(ctx context.Context, accountID, chatID, chatContactID uuid.UUID, chatMessage dto.ChatMessageCreateDTO) (*models.ChatMessage, error)
+	ListarMensagens(ctx context.Context, accountID, chatID, chatContactID uuid.UUID) ([]models.ChatMessage, error)
+	SugestaoRespostaAI(ctx context.Context, accountID, chatID, chatContactID uuid.UUID, message string) (string, error)
+	ProcessarMensagemRecebida(ctx context.Context, webhookBaileysPayload *dto.WebhookBaileysPayload) error
 
 	IniciarSessaoWhatsApp(ctx context.Context, accountID, chatID uuid.UUID) (*StartSessionResponse, error)
 	ObterQRCodeSessao(ctx context.Context, accountID, chatID uuid.UUID) (*QRCodeResponse, error)
@@ -34,19 +35,21 @@ type ChatWhatsAppService interface {
 }
 
 type chatWhatsAppService struct {
-	log             *slog.Logger
-	chatRepo        db.ChatRepository
-	contactRepo     db.ContactRepository
-	chatContactRepo db.ChatContactRepository
-	chatMessageRepo db.ChatMessageRepository
-	openaiService   OpenAIService
-	baileysService  WhatsAppBaileysService
+	log                 *slog.Logger
+	chatRepo            db.ChatRepository
+	contactRepo         db.ContactRepository
+	whatsAppContactRepo db.WhatsappContactRepository
+	chatContactRepo     db.ChatContactRepository
+	chatMessageRepo     db.ChatMessageRepository
+	openaiService       OpenAIService
+	baileysService      WhatsAppBaileysService
 	// evolutionService EvolutionService
 }
 
 func NewChatWhatsAppService(
 	chatRepo db.ChatRepository,
 	contactRepo db.ContactRepository,
+	whatsAppContactRepo db.WhatsappContactRepository,
 	chatContactRepo db.ChatContactRepository,
 	chatMessageRepo db.ChatMessageRepository,
 	openaiService OpenAIService,
@@ -54,13 +57,14 @@ func NewChatWhatsAppService(
 	// evolution EvolutionService,
 ) ChatWhatsAppService {
 	return &chatWhatsAppService{
-		log:             logger.GetLogger(),
-		chatRepo:        chatRepo,
-		contactRepo:     contactRepo,
-		chatContactRepo: chatContactRepo,
-		chatMessageRepo: chatMessageRepo,
-		openaiService:   openaiService,
-		baileysService:  baileysService,
+		log:                 logger.GetLogger(),
+		chatRepo:            chatRepo,
+		contactRepo:         contactRepo,
+		whatsAppContactRepo: whatsAppContactRepo,
+		chatContactRepo:     chatContactRepo,
+		chatMessageRepo:     chatMessageRepo,
+		openaiService:       openaiService,
+		baileysService:      baileysService,
 		// evolutionService: evolution,
 	}
 }
@@ -73,38 +77,53 @@ func (s *chatWhatsAppService) RegistrarChat(ctx context.Context, chat *models.Ch
 	return result, nil
 }
 
-func (s *chatWhatsAppService) SugerirRespostaIA(ctx context.Context, accountID, chatID, contactID uuid.UUID, mensagemRecebida string) (string, error) {
+// SugestaoRespostaAI gera uma sugestão de resposta usando IA com base no histórico do chat
+func (s *chatWhatsAppService) SugestaoRespostaAI(ctx context.Context, accountID, chatID, chatContactID uuid.UUID, message string) (string, error) {
 	// 1. Buscar chat ativo do setor
 	chat, err := s.chatRepo.GetActiveByID(ctx, accountID, chatID)
 	if err != nil {
 		return "", fmt.Errorf("chat não encontrado para o setor %s: %w", chatID, err)
 	}
 
-	// 2. Buscar ou criar o relacionamento com o contato
-	_, err = s.chatContactRepo.FindOrCreate(ctx, accountID, chat.ID, contactID)
+	// 2. Buscar relação chat_contact
+	chatContact, err := s.chatContactRepo.FindByID(ctx, accountID, chatID, chatContactID)
 	if err != nil {
-		return "", fmt.Errorf("erro ao obter chat_contact: %w", err)
+		return "", fmt.Errorf("erro ao buscar ou criar chat_contact: %w", err)
 	}
 
-	// 3. Buscar dados do contato
-	contact, err := s.contactRepo.GetByID(ctx, contactID)
+	// 3. Buscar dados do whatsapp contact
+	whatsappContact, err := s.whatsAppContactRepo.FindByID(ctx, chatContact.WhatsappContactID)
 	if err != nil {
-		return "", fmt.Errorf("contato não encontrado: %w", err)
+		return "", fmt.Errorf("erro ao buscar contato do WhatsApp: %w", err)
+	}
+
+	// 4. Buscar contato no CRM
+	contact, err := s.contactRepo.GetByID(ctx, whatsappContact.ContactID)
+	if err != nil {
+		return "", fmt.Errorf("erro ao buscar contato no CRM: %w", err)
+	}
+
+	// 5. Buscar mensagens anteriores do chat
+	chatMessages, err := s.chatMessageRepo.ListByChatContact(ctx, chatContact.ID)
+	if err != nil {
+		return "", fmt.Errorf("erro ao buscar mensagens do chat: %w", err)
 	}
 
 	// 4. Gerar sugestão via OpenAI
-	prompt := buildPrompt(chat.Instructions, contact, mensagemRecebida)
+	prompt := buildPrompt(contact, chatMessages, message)
 	resp, err := s.openaiService.CreateChatCompletion(ctx, ChatCompletionRequest{
 		Model: "gpt-4o-mini",
 		Messages: []ChatMessage{
-			{Role: "system", Content: "Você é um assistente de atendimento do setor " + chat.Department},
+			{Role: "system", Content: chat.Instructions},
 			{Role: "user", Content: prompt},
 		},
-		Temperature: 0.4,
+		Temperature: 0,
 	})
 	if err != nil {
 		return "", fmt.Errorf("erro na IA: %w", err)
 	}
+
+	s.log.Debug("Prompt enviado para IA", slog.String("prompt", prompt))
 
 	sugestao := resp.Choices[0].Message.Content
 
@@ -138,77 +157,56 @@ func (s *chatWhatsAppService) AtualizarChat(ctx context.Context, accountID, chat
 	return s.chatRepo.Update(ctx, chat)
 }
 
-// ListarContatosDoChat retorna todos os contatos de um chat
-func (s *chatWhatsAppService) ListarContatosDoChat(ctx context.Context, accountID, chatID uuid.UUID) ([]*models.ChatContact, error) {
-	// Verifica se o chat pertence à conta
-	_, err := s.chatRepo.GetByID(ctx, accountID, chatID)
-	if err != nil {
-		return nil, fmt.Errorf("chat não encontrado ou não pertence à conta: %w", err)
-	}
+// buildPrompt constrói o prompt para a IA com base no contato, mensagens anteriores e nova mensagem
+func buildPrompt(c *models.Contact, chatMessages []models.ChatMessage, message string) string {
+	var b strings.Builder
 
-	return s.chatContactRepo.ListByChatID(ctx, accountID, chatID)
-}
-
-func buildPrompt(instructions string, c *models.Contact, mensagem string) string {
-	cidade := ""
-	if c.Cidade != nil {
-		cidade = *c.Cidade
+	fmt.Fprintf(&b, "📇 CONTATO:\n- Nome: %s\n", c.Name)
+	if c.Cidade != nil && c.Estado != nil {
+		fmt.Fprintf(&b, "- Localização: %s - %s\n", *c.Cidade, *c.Estado)
 	}
-	estado := ""
-	if c.Estado != nil {
-		estado = *c.Estado
-	}
-	history := ""
 	if c.History != nil {
-		history = *c.History
+		fmt.Fprintf(&b, "- Histórico: %s\n", *c.History)
 	}
-	return fmt.Sprintf(`
-Mensagem recebida do cliente: "%s"
+	if c.Tags != nil && len(c.Tags.Perfil) > 0 {
+		perfis := make([]string, len(c.Tags.Perfil))
+		for i, tag := range c.Tags.Perfil {
+			perfis[i] = *tag
+		}
+		fmt.Fprintf(&b, "- Perfil: %s\n", strings.Join(perfis, ", "))
+	}
 
-Informações do contato:
-- Nome: %s
-- Cidade: %s - %s
-- Histórico: %s
+	fmt.Fprintf(&b, "\n💬 CONVERSA ANTERIOR:\n")
+	for _, msg := range chatMessages {
+		autor := "Cliente"
+		if msg.Actor == "atendente" {
+			autor = "Atendente"
+		}
+		fmt.Fprintf(&b, "%s: %s\n", autor, msg.Content)
+	}
 
-Instruções do setor:
-%s
+	fmt.Fprintf(&b, "\n📥 MENSAGEM RECEBIDA:\nCliente: %s\n", message)
 
-Gere uma resposta adequada em tom cordial e objetivo.
-Nunca envie chave PIX real. Use o marcador [INSERIR CHAVE PIX AQUI] se necessário.
-`, mensagem, c.Name, cidade, estado, history, instructions)
+	fmt.Fprintf(&b, "\n📌 ORIENTAÇÃO:\nCom base nas informações acima, sugira uma próxima resposta adequada para o WhatsApp.\nA mensagem deve:\n")
+	fmt.Fprintf(&b, "- Manter o tom alinhado com o atendimento comercial da Hyberica;\n")
+	fmt.Fprintf(&b, "- Esclarecer dúvidas, apresentar soluções ou conduzir o diálogo conforme necessário;\n")
+	fmt.Fprintf(&b, "- Ser objetiva, cordial e informativa.\n")
+
+	return b.String()
 }
 
-// ListarContatosComDados retorna todos os contatos de um chat com dados adicionais
-func (s *chatWhatsAppService) ListarContatosComDados(ctx context.Context, accountID, chatID uuid.UUID) ([]dto.ChatContactResumoDTO, error) {
-	contatos, err := s.chatContactRepo.ListByChatID(ctx, accountID, chatID)
+// ListarContatosDoChat retorna todos os contatos de um chat com dados adicionais
+func (s *chatWhatsAppService) ListarContatosDoChat(ctx context.Context, accountID, chatID uuid.UUID) ([]dto.ChatContactFull, error) {
+	chatContacts, err := s.chatContactRepo.ListByChatID(ctx, accountID, chatID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("erro ao listar contatos do chat: %w", err)
 	}
 
-	var dtos []dto.ChatContactResumoDTO
-
-	for _, c := range contatos {
-		contact, err := s.contactRepo.GetByID(ctx, uuid.MustParse(c.ContactID))
-		if err != nil {
-			// Ignora contatos órfãos ou removidos
-			continue
-		}
-
-		dtos = append(dtos, dto.ChatContactResumoDTO{
-			ID:         c.ID,
-			ContactID:  c.ContactID,
-			Nome:       contact.Name,
-			WhatsApp:   *contact.WhatsApp,
-			Status:     c.Status,
-			Atualizado: c.UpdatedAt,
-		})
-	}
-
-	return dtos, nil
+	return chatContacts, nil
 }
 
 // RegistrarMensagemManual registra uma mensagem manual no chat
-func (s *chatWhatsAppService) RegistrarMensagemManual(ctx context.Context, accountID, chatID, contactID uuid.UUID, chatMessage dto.ChatMessageCreateDTO) (*models.ChatMessage, error) {
+func (s *chatWhatsAppService) RegistrarMensagemManual(ctx context.Context, accountID, chatID, chatContactID uuid.UUID, chatMessage dto.ChatMessageCreateDTO) (*models.ChatMessage, error) {
 	// 🔹 Verifica se o chat é da conta
 	chat, err := s.chatRepo.GetByID(ctx, accountID, chatID)
 	if err != nil {
@@ -216,108 +214,148 @@ func (s *chatWhatsAppService) RegistrarMensagemManual(ctx context.Context, accou
 	}
 
 	// 🔹 Obtém ou cria o relacionamento
-	chatContact, err := s.chatContactRepo.FindOrCreate(ctx, accountID, chatID, contactID)
+	chatContact, err := s.chatContactRepo.FindByID(ctx, accountID, chatID, chatContactID)
 	if err != nil {
 		return nil, err
 	}
 
 	// 🔹 Cria nova mensagem
 	msg := models.ChatMessage{
-		ID:              uuid.NewString(),
 		ChatContactID:   chatContact.ID,
 		Actor:           chatMessage.Actor,
 		Type:            chatMessage.Type,
 		Content:         chatMessage.Content,
 		FileURL:         chatMessage.FileURL,
 		SourceProcessed: false,
-		CreatedAt:       time.Now(),
-		UpdatedAt:       time.Now(),
 	}
 
-	err = s.chatMessageRepo.Insert(ctx, msg)
+	messageCreated, err := s.chatMessageRepo.Create(ctx, msg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("erro ao registrar mensagem: %w", err)
 	}
+	s.log.Debug("Mensagem registrada com sucesso", slog.Any("mensagem", messageCreated))
 
 	// Após salvar a mensagem no banco
-	if chatMessage.Actor == "atendente" || chatMessage.Actor == "ai" {
+	if messageCreated.Actor == "atendente" || messageCreated.Actor == "ai" {
 		// s.log.Debug("Mensagem registrada com sucesso", slog.String("mensagem", chatMessage.Content))
-		// Buscar contato
-		contato, err := s.contactRepo.GetByID(ctx, contactID)
-		if err == nil && contato.WhatsApp != nil {
+		// Buscar whatsapp contact pelo ID
+		whatsappContact, err := s.whatsAppContactRepo.FindByID(ctx, chatContact.WhatsappContactID)
+		if err == nil {
 			// err = s.evolutionService.SendTextMessage(chat.InstanceName, *contato.WhatsApp, chatMessage.Content)
-			_, err = s.baileysService.SendTextMessage(chat.InstanceName, *contato.WhatsApp, chatMessage.Content)
+			_, err = s.baileysService.SendTextMessage(chat.InstanceName, whatsappContact.JID, messageCreated.Content)
 			if err != nil {
-				s.log.Error("Erro ao enviar mensagem para o WhatsApp", slog.String("numero", *contato.WhatsApp), slog.String("mensagem", chatMessage.Content), slog.Any("erro", err))
+				s.log.Error("Erro ao enviar mensagem para o WhatsApp", slog.String("numero", whatsappContact.Phone), slog.String("mensagem", messageCreated.Content), slog.Any("erro", err))
 			} else {
-				s.log.Debug("Mensagem enviada com sucesso para o WhatsApp", slog.String("numero", *contato.WhatsApp), slog.String("mensagem", chatMessage.Content))
+				s.log.Debug("Mensagem enviada com sucesso para o WhatsApp", slog.String("numero", whatsappContact.Phone), slog.String("mensagem", messageCreated.Content))
 			}
 		}
 	}
 
-	return &msg, nil
+	return messageCreated, nil
 }
 
 // ListarMensagens retorna todas as mensagens de um chat
-func (s *chatWhatsAppService) ListarMensagens(ctx context.Context, accountID, chatID, contactID uuid.UUID) ([]*models.ChatMessage, error) {
-	// 1. Busca ou valida o chat
-	_, err := s.chatRepo.GetByID(ctx, accountID, chatID)
-	if err != nil {
-		return nil, err
-	}
-
-	// 2. Busca relação chat_contact
-	chatContact, err := s.chatContactRepo.FindOrCreate(ctx, accountID, chatID, contactID)
-	if err != nil {
-		return nil, err
-	}
-
-	// 3. Retorna mensagens ordenadas
-	return s.chatMessageRepo.ListByChatContact(ctx, uuid.MustParse(chatContact.ID))
+func (s *chatWhatsAppService) ListarMensagens(ctx context.Context, accountID, chatID, chatContactID uuid.UUID) ([]models.ChatMessage, error) {
+	// 1. Retorna mensagens ordenadas
+	return s.chatMessageRepo.ListByChatContact(ctx, chatContactID)
 }
 
 // ProcessarMensagemRecebida processa uma mensagem recebida do WhatsApp
-func (s *chatWhatsAppService) ProcessarMensagemRecebida(ctx context.Context, instanceName, remoteJid, texto string) error {
+func (s *chatWhatsAppService) ProcessarMensagemRecebida(ctx context.Context, webhookBaileysPayload *dto.WebhookBaileysPayload) error {
 	// 🔹 1. Buscar o chat com base na instância da GetActiveByInstanceName
-	chat, err := s.chatRepo.GetActiveByInstanceName(ctx, instanceName)
+	chat, err := s.chatRepo.GetActiveByInstanceName(ctx, webhookBaileysPayload.SessionID)
 	if err != nil {
-		return fmt.Errorf("nenhum chat ativo com instance_name=%s: %w", instanceName, err)
+		return fmt.Errorf("nenhum chat ativo com instance_name=%s: %w", webhookBaileysPayload.SessionID, err)
 	}
 
 	// 🔹 2. Extrair número do remoteJid (ex: 554999999999@...)
-	numero := utils.ExtractWhatsAppNumber(remoteJid)
-	if numero == "" {
-		return fmt.Errorf("número inválido extraído de: %s", remoteJid)
+	normalizedNumber := utils.NormalizeWhatsAppNumber(webhookBaileysPayload.From)
+
+	res, err := s.baileysService.ResolveNumber(webhookBaileysPayload.SessionID, normalizedNumber)
+	if err != nil {
+		s.log.Error("Erro ao resolver número via Baileys", slog.String("normalizedNumber", normalizedNumber), slog.Any("erro", err))
+		return err
+	}
+	if res == nil {
+		return fmt.Errorf("resposta nula da API para número %s", normalizedNumber)
+	}
+	if !res.Found {
+		return fmt.Errorf("número %s não encontrado no WhatsApp", normalizedNumber)
 	}
 
-	// 🔹 3. Buscar ou criar o contato
-	contact, err := s.contactRepo.FindOrCreateByWhatsApp(ctx, chat.AccountID, numero)
+	// 🔹 3. Enriquecer dados com IA
+	enrichedContact, err := s.EnriquecerContatoComIA(ctx, webhookBaileysPayload, res.BusinessProfile)
+	if err != nil {
+		s.log.Warn("IA falhou ao enriquecer contato, usando fallback", slog.Any("erro", err))
+		// fallback mínimo
+		enrichedContact = &models.Contact{
+			Name:     webhookBaileysPayload.PushName,
+			WhatsApp: &normalizedNumber, // Garante que o número normalizado seja usado
+		}
+	}
+
+	// 🔹 4. Buscar ou criar o contato
+	contact, err := s.contactRepo.FindOrCreateByWhatsApp(ctx, chat.AccountID, enrichedContact)
 	if err != nil {
 		return fmt.Errorf("erro ao buscar ou criar contato: %w", err)
 	}
 
-	// 🔹 4. Obter ou criar o relacionamento chat_contact
-	chatContact, err := s.chatContactRepo.FindOrCreate(ctx, chat.AccountID, chat.ID, contact.ID)
+	whatsAppContact := &models.WhatsappContact{
+		AccountID:       contact.AccountID,
+		ContactID:       contact.ID,
+		Name:            contact.Name,
+		Phone:           normalizedNumber,
+		JID:             webhookBaileysPayload.From,
+		IsBusiness:      res.IsBusiness,
+		BusinessProfile: res.BusinessProfile,
+	}
+
+	whatsAppContact, err = s.whatsAppContactRepo.FindOrCreate(ctx, whatsAppContact)
+	if err != nil {
+		return fmt.Errorf("erro ao buscar ou criar contato do WhatsApp: %w", err)
+	}
+
+	// 🔹 5. Obter ou criar o relacionamento chat_contact
+	chatContact, err := s.chatContactRepo.FindOrCreate(ctx, chat.AccountID, chat.ID, whatsAppContact.ID)
 	if err != nil {
 		return fmt.Errorf("erro ao buscar ou criar chat_contact: %w", err)
 	}
 
-	// 🔹 5. Salvar a mensagem recebida
-	now := time.Now()
-	msg := models.ChatMessage{
-		ID:              uuid.NewString(),
-		ChatContactID:   chatContact.ID,
-		Actor:           "cliente",
-		Type:            "texto",
-		Content:         texto,
-		FileURL:         "",
-		SourceProcessed: false,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	}
+	// 🔹 6. Salvar a mensagem recebida
+	if webhookBaileysPayload.Type == "text" {
 
-	if err := s.chatMessageRepo.Insert(ctx, msg); err != nil {
-		return fmt.Errorf("erro ao salvar mensagem: %w", err)
+		msg := models.ChatMessage{
+			ChatContactID:   chatContact.ID,
+			Actor:           "cliente",
+			Type:            "texto",
+			Content:         webhookBaileysPayload.Message,
+			FileURL:         "",
+			SourceProcessed: false,
+		}
+
+		messageCreated, err := s.chatMessageRepo.Create(ctx, msg)
+		if err != nil {
+			return fmt.Errorf("erro ao registrar mensagem recebida: %w", err)
+		}
+		s.log.Debug("Mensagem recebida registrada com sucesso", slog.Any("mensagem", messageCreated))
+	} else if webhookBaileysPayload.Type == "image" || webhookBaileysPayload.Type == "video" {
+		msg := models.ChatMessage{
+			ChatContactID:   chatContact.ID,
+			Actor:           "cliente",
+			Type:            webhookBaileysPayload.Type,
+			Content:         webhookBaileysPayload.Message,
+			FileURL:         "", // TODO: URL do arquivo enviado
+			SourceProcessed: false,
+		}
+
+		messageCreated, err := s.chatMessageRepo.Create(ctx, msg)
+		if err != nil {
+			return fmt.Errorf("erro ao registrar mensagem recebida: %w", err)
+		}
+		s.log.Debug("Mensagem recebida registrada com sucesso", slog.Any("mensagem", messageCreated))
+	} else {
+		s.log.Warn("Tipo de mensagem não suportado", slog.String("type", webhookBaileysPayload.Type))
+		return fmt.Errorf("tipo de mensagem não suportado: %s", webhookBaileysPayload.Type)
 	}
 
 	return nil
@@ -378,4 +416,135 @@ func (s *chatWhatsAppService) VerificarSessionStatusViaAPI(ctx context.Context, 
 	}
 
 	return sessionStatus, nil
+}
+
+func (s *chatWhatsAppService) EnriquecerContatoComIA(
+	ctx context.Context,
+	payload *dto.WebhookBaileysPayload,
+	businessProfile *models.BusinessProfile,
+) (*models.Contact, error) {
+	// Estrutura auxiliar para input do prompt
+	input := map[string]interface{}{
+		"phone":    payload.Phone,
+		"pushName": payload.PushName,
+	}
+
+	if businessProfile != nil {
+		input["business_profile"] = businessProfile
+	}
+
+	// Serializa os dados recebidos em JSON
+	rawData, err := json.MarshalIndent(input, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("erro ao serializar dados para IA: %w", err)
+	}
+
+	// Mensagens para a IA no formato Chat
+	request := ChatCompletionRequest{
+		Model: "gpt-4.1-nano",
+		Messages: []ChatMessage{
+			{
+				Role: "system",
+				Content: `
+Você é um assistente que atua como um classificador e enriquecedor de dados de contatos para um sistema de CRM.
+
+Sua função é analisar os dados recebidos de uma mensagem do WhatsApp (incluindo nome, número e opcionalmente perfil comercial) e retornar um objeto JSON que preencha corretamente os campos da struct abaixo:
+
+
+// Contact representa um contato no sistema
+type Contact struct {
+	Name          string       'json:"name"'                    // Nome do contato (sem sufixos de marca ou empresa)
+	Email         *string      'json:"email,omitempty"'         // Se informado no perfil comercial
+	WhatsApp      *string      'json:"whatsapp,omitempty"'      // Apenas números com DDI (ex: 554991234567)
+	Gender        *string      'json:"gender,omitempty"'        // "masculino", "feminino", "outro" — inferir apenas com alta confiança
+	BirthDate     *time.Time   'json:"birth_date,omitempty"'    // Se conhecido, formato RFC3339
+	Bairro        *string      'json:"bairro,omitempty"'        // Extrair do endereço (se aplicável)
+	Cidade        *string      'json:"cidade,omitempty"'
+	Estado        *string      'json:"estado,omitempty"'
+	Tags          *ContactTags 'json:"tags,omitempty"'          // JSONB com campos interesses, perfil, eventos
+	History       *string      'json:"history,omitempty"'       // Registrar primeira mensagem recebida com data
+}
+
+type ContactTags struct {
+	Interesses []*string 'json:"interesses,omitempty"'
+	Perfil     []*string 'json:"perfil,omitempty"'
+	Eventos    []*string 'json:"eventos,omitempty"'
+}
+
+### INSTRUÇÕES:
+
+1. Use os dados brutos fornecidos em JSON abaixo.
+2. Quando 'business_profile' estiver presente, **use os campos 'category' e 'description'** para:
+   - Preencher 'tags.perfil' ou 'tags.interesses' se aplicável.
+   - Complementar o campo 'history', descrevendo o ramo da empresa.
+3. Quando 'business_profile' **não estiver presente**, assuma que o remetente é uma pessoa física. Ignore qualquer dado do perfil comercial e baseie-se apenas nos campos 'pushName', 'phone'.
+4. Campos opcionais ('email', 'bairro', 'tags', etc.) devem ser preenchidos **apenas se houver informação clara ou inferência altamente confiável**.
+5. Use 'null' explicitamente nos campos omissos. Responda apenas com o JSON da struct 'Contact'.
+`,
+			},
+			{
+				Role:    "user",
+				Content: string(rawData),
+			},
+		},
+		Temperature: 0.2,
+		ResponseFormat: &ResponseFormat{
+			Type: "json_schema",
+			JSONSchema: JSONSchemaSpec{
+				Name: "EnrichedContact",
+				Schema: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"name":     map[string]string{"type": "string"},
+						"email":    map[string]string{"type": "string", "format": "email"},
+						"whatsapp": map[string]string{"type": "string"},
+						"gender":   map[string]string{"type": "string"},
+						"birth_date": map[string]string{
+							"type":   "string",
+							"format": "date-time",
+						},
+						"bairro":  map[string]string{"type": "string"},
+						"cidade":  map[string]string{"type": "string"},
+						"estado":  map[string]string{"type": "string"},
+						"history": map[string]string{"type": "string"},
+						"tags": map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"interesses": map[string]interface{}{
+									"type":  "array",
+									"items": map[string]string{"type": "string"},
+								},
+								"perfil": map[string]interface{}{
+									"type":  "array",
+									"items": map[string]string{"type": "string"},
+								},
+								"eventos": map[string]interface{}{
+									"type":  "array",
+									"items": map[string]string{"type": "string"},
+								},
+							},
+						},
+					},
+					"required": []string{"name"},
+				},
+			},
+		},
+	}
+
+	response, err := s.openaiService.CreateChatCompletion(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao gerar resposta com IA: %w", err)
+	}
+
+	if len(response.Choices) == 0 {
+		return nil, fmt.Errorf("resposta da IA vazia")
+	}
+
+	// Tenta deserializar a resposta da IA
+	enriched := &models.Contact{}
+	if err := json.Unmarshal([]byte(response.Choices[0].Message.Content), enriched); err != nil {
+		return nil, fmt.Errorf("erro ao interpretar resposta da IA: %w", err)
+	}
+
+	return enriched, nil
 }

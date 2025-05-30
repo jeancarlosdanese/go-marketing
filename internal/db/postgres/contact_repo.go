@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jeancarlosdanese/go-marketing/internal/db"
 	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
 	"github.com/jeancarlosdanese/go-marketing/internal/utils"
@@ -25,7 +26,7 @@ type contactRepo struct {
 }
 
 // NewContactRepository cria um novo repositório para contatos.
-func NewContactRepository(db *sql.DB) *contactRepo {
+func NewContactRepository(db *sql.DB) db.ContactRepository {
 	log := logger.GetLogger()
 	return &contactRepo{log: log, db: db}
 }
@@ -587,46 +588,94 @@ func (r *contactRepo) GetAvailableContactsForCampaign(
 }
 
 // 📌 Buscar contato por WhatsApp ou criar se não existir
-func (r *contactRepo) FindOrCreateByWhatsApp(ctx context.Context, accountID uuid.UUID, whatsapp string) (*models.Contact, error) {
+func (r *contactRepo) FindOrCreateByWhatsApp(ctx context.Context, accountID uuid.UUID, contact *models.Contact) (*models.Contact, error) {
 	query := `
-		SELECT id, account_id, name, whatsapp
+		SELECT id, account_id, name, whatsapp, email, gender, birth_date, bairro, cidade, estado, tags, history, created_at, updated_at
 		FROM contacts
 		WHERE account_id = $1 AND whatsapp = $2
 		LIMIT 1
 	`
 
-	var contact models.Contact
-	err := r.db.QueryRowContext(ctx, query, accountID, whatsapp).Scan(
+	var tagsRaw []byte
+	err := r.db.QueryRowContext(ctx, query, accountID, contact.WhatsApp).Scan(
 		&contact.ID,
 		&contact.AccountID,
 		&contact.Name,
 		&contact.WhatsApp,
+		&contact.Email,
+		&contact.Gender,
+		&contact.BirthDate,
+		&contact.Bairro,
+		&contact.Cidade,
+		&contact.Estado,
+		&tagsRaw,
+		&contact.History,
+		&contact.CreatedAt,
+		&contact.UpdatedAt,
 	)
+
 	if err == sql.ErrNoRows {
-		// 🔹 Inserir contato e retornar dados
 		insert := `
-			INSERT INTO contacts (account_id, name, whatsapp, created_at, updated_at)
-			VALUES ($1, $2, $3, now(), now())
+			INSERT INTO contacts (
+				account_id, name, whatsapp, email, gender, birth_date,
+				bairro, cidade, estado, tags, history, created_at, updated_at
+			) VALUES (
+				$1, $2, $3, $4, $5, $6,
+				$7, $8, $9, $10, $11, now(), now()
+			)
 			RETURNING id, created_at, updated_at
 		`
-		nome := "Contato " + whatsapp[len(whatsapp)-4:]
 
-		err := r.db.QueryRowContext(ctx, insert, accountID, nome, whatsapp).Scan(
+		var tagsJSON []byte
+		if contact.Tags != nil {
+			tagsJSON, _ = json.Marshal(contact.Tags) // se falhar, insere null
+		}
+
+		nome := contact.Name
+		if nome == "" {
+			if contact.WhatsApp != nil && len(*contact.WhatsApp) >= 4 {
+				nome = "Contato " + (*contact.WhatsApp)[len(*contact.WhatsApp)-4:]
+			} else {
+				nome = "Contato"
+			}
+		}
+
+		err := r.db.QueryRowContext(ctx, insert,
+			accountID,
+			nome,
+			contact.WhatsApp,
+			contact.Email,
+			contact.Gender,
+			contact.BirthDate,
+			contact.Bairro,
+			contact.Cidade,
+			contact.Estado,
+			tagsJSON,
+			contact.History,
+		).Scan(
 			&contact.ID,
 			&contact.CreatedAt,
 			&contact.UpdatedAt,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("erro ao criar contato: %w", err)
 		}
 
 		contact.AccountID = accountID
 		contact.Name = nome
-		contact.WhatsApp = &whatsapp
-		return &contact, nil
+		return contact, nil
+
 	} else if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("erro ao buscar contato: %w", err)
 	}
 
-	return &contact, nil
+	// Desserializa tags se presentes
+	if len(tagsRaw) > 0 {
+		var tags models.ContactTags
+		if err := json.Unmarshal(tagsRaw, &tags); err == nil {
+			contact.Tags = &tags
+		}
+	}
+
+	return contact, nil
 }

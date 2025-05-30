@@ -270,7 +270,8 @@ func (h *contactHandle) UpdateContactHandler() http.HandlerFunc {
 			contact.Email = utils.NormalizeEmail(contact.Email)
 		}
 		if contactDTO.WhatsApp != nil {
-			contact.WhatsApp = utils.FormatWhatsAppOnlyNumbers(contact.WhatsApp)
+			normalizedWhatsApp := utils.NormalizeWhatsAppNumber(*contactDTO.WhatsApp)
+			contact.WhatsApp = &normalizedWhatsApp
 		}
 		if contactDTO.Gender != nil {
 			contact.Gender = contactDTO.Gender

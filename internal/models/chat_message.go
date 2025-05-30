@@ -2,11 +2,15 @@
 
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type ChatMessage struct {
-	ID              string     `json:"id"`
-	ChatContactID   string     `json:"chat_contact_id"`
+	ID              uuid.UUID  `json:"id"`
+	ChatContactID   uuid.UUID  `json:"chat_contact_id"`
 	Actor           string     `json:"actor"` // cliente, atendente, ai
 	Type            string     `json:"type"`  // texto, audio, imagem, video, documento
 	Content         string     `json:"content,omitempty"`

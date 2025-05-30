@@ -50,7 +50,7 @@ func (r *AccountRepoPostgres) Create(ctx context.Context, account *models.Accoun
 
 // GetByID busca uma conta pelo ID (usando UUID)
 func (r *AccountRepoPostgres) GetByID(ctx context.Context, id uuid.UUID) (*models.Account, error) {
-	r.log.Debug("Buscando conta por ID", "id", id)
+	// r.log.Debug("Buscando conta por ID", "id", id)
 
 	query := "SELECT id, name, email, whatsapp FROM accounts WHERE id = $1"
 	row := r.db.QueryRow(query, id)

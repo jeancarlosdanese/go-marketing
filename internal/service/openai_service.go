@@ -27,10 +27,21 @@ type ChatMessage struct {
 }
 
 type ChatCompletionRequest struct {
-	Model       string        `json:"model"`                 // Exemplo: "gpt-4"
-	Messages    []ChatMessage `json:"messages"`              // Histórico de mensagens
-	Temperature float64       `json:"temperature,omitempty"` // Opcional: Controle de aleatoriedade
-	// Outros parâmetros opcionais podem ser adicionados conforme necessário
+	Model          string          `json:"model"`                 // Exemplo: "gpt-4"
+	Messages       []ChatMessage   `json:"messages"`              // Histórico de mensagens
+	Temperature    float64         `json:"temperature,omitempty"` // Opcional: Controle de aleatoriedade
+	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
+	// MaxCompletionTokens int           `json:"max_completion_tokens,omitempty"` // Opcional: Limite de tokens na resposta
+}
+
+type ResponseFormat struct {
+	Type       string         `json:"type"` // "json_schema"
+	JSONSchema JSONSchemaSpec `json:"json_schema"`
+}
+
+type JSONSchemaSpec struct {
+	Name   string                 `json:"name"`
+	Schema map[string]interface{} `json:"schema"`
 }
 
 type ChatCompletionResponse struct {

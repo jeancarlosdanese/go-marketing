@@ -5,45 +5,63 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jeancarlosdanese/go-marketing/internal/db"
+	"github.com/jeancarlosdanese/go-marketing/internal/logger"
 	"github.com/jeancarlosdanese/go-marketing/internal/models"
 )
 
 type chatMessageRepository struct {
-	db *sql.DB
+	log *slog.Logger
+	db  *sql.DB
 }
 
 func NewChatMessageRepository(db *sql.DB) db.ChatMessageRepository {
-	return &chatMessageRepository{db: db}
+	return &chatMessageRepository{log: logger.GetLogger(), db: db}
 }
 
-// ✅ Insere uma nova mensagem no histórico
-func (r *chatMessageRepository) Insert(ctx context.Context, msg models.ChatMessage) error {
+// ✅ Create uma nova mensagem no histórico
+func (r *chatMessageRepository) Create(ctx context.Context, msg models.ChatMessage) (*models.ChatMessage, error) {
+	r.log.Debug("Criando nova mensagem no histórico", slog.Any("mensagem", msg))
+
 	query := `
-		INSERT INTO chat_messages (
-			id, chat_contact_id, actor, type, content, file_url, source_processed, created_at, updated_at
-		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9
-		)
+		INSERT INTO chat_messages (chat_contact_id, actor, type, content, file_url, source_processed)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, chat_contact_id, actor, type, content, file_url, source_processed, created_at, updated_at, deleted_at
 	`
-	_, err := r.db.ExecContext(ctx, query,
-		msg.ID,
+	var newMsg models.ChatMessage
+	err := r.db.QueryRowContext(ctx, query,
 		msg.ChatContactID,
 		msg.Actor,
 		msg.Type,
 		msg.Content,
 		msg.FileURL,
 		msg.SourceProcessed,
-		msg.CreatedAt,
-		msg.UpdatedAt,
+	).Scan(
+		&newMsg.ID,
+		&newMsg.ChatContactID,
+		&newMsg.Actor,
+		&newMsg.Type,
+		&newMsg.Content,
+		&newMsg.FileURL,
+		&newMsg.SourceProcessed,
+		&newMsg.CreatedAt,
+		&newMsg.UpdatedAt,
+		&newMsg.DeletedAt,
 	)
-	return err
+	if err != nil {
+		r.log.Error("Erro ao inserir nova mensagem no histórico", slog.Any("erro", err))
+		return nil, err
+	}
+
+	r.log.Debug("Mensagem criada com sucesso", slog.Any("mensagem", newMsg))
+	return &newMsg, nil
 }
 
 // ListByChatContact retorna todas as mensagens de um contato específico
-func (r *chatMessageRepository) ListByChatContact(ctx context.Context, chatContactID uuid.UUID) ([]*models.ChatMessage, error) {
+func (r *chatMessageRepository) ListByChatContact(ctx context.Context, chatContactID uuid.UUID) ([]models.ChatMessage, error) {
 	query := `
 		SELECT id, chat_contact_id, actor, type, content, file_url,
 		       source_processed, created_at, updated_at, deleted_at
@@ -58,63 +76,25 @@ func (r *chatMessageRepository) ListByChatContact(ctx context.Context, chatConta
 	}
 	defer rows.Close()
 
-	var mensagens []*models.ChatMessage
-	for rows.Next() {
-		var m models.ChatMessage
-		err := rows.Scan(
-			&m.ID,
-			&m.ChatContactID,
-			&m.Actor,
-			&m.Type,
-			&m.Content,
-			&m.FileURL,
-			&m.SourceProcessed,
-			&m.CreatedAt,
-			&m.UpdatedAt,
-			&m.DeletedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		mensagens = append(mensagens, &m)
-	}
-
-	return mensagens, nil
-}
-
-// ✅ Lista mensagens de um atendimento específico (ordenadas por data)
-func (r *chatMessageRepository) GetByChatContact(ctx context.Context, chatContactID string) ([]models.ChatMessage, error) {
-	query := `
-		SELECT id, chat_contact_id, actor, type, content, file_url, source_processed, created_at, updated_at, deleted_at
-		FROM chat_messages
-		WHERE chat_contact_id = $1
-		ORDER BY created_at ASC
-	`
-	rows, err := r.db.QueryContext(ctx, query, chatContactID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var messages []models.ChatMessage
 	for rows.Next() {
-		var msg models.ChatMessage
+		var message models.ChatMessage
 		err := rows.Scan(
-			&msg.ID,
-			&msg.ChatContactID,
-			&msg.Actor,
-			&msg.Type,
-			&msg.Content,
-			&msg.FileURL,
-			&msg.SourceProcessed,
-			&msg.CreatedAt,
-			&msg.UpdatedAt,
-			&msg.DeletedAt,
+			&message.ID,
+			&message.ChatContactID,
+			&message.Actor,
+			&message.Type,
+			&message.Content,
+			&message.FileURL,
+			&message.SourceProcessed,
+			&message.CreatedAt,
+			&message.UpdatedAt,
+			&message.DeletedAt,
 		)
 		if err != nil {
 			return nil, err
 		}
-		messages = append(messages, msg)
+		messages = append(messages, message)
 	}
 
 	return messages, nil

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // FormatWhatsApp formata um número de telefone para o padrão internacional do WhatsApp
@@ -55,26 +56,13 @@ func FormatWhatsApp(number string) string {
 	}
 }
 
-// FormatWhatsAppOnlyNumbers verifica se o número de WhatsApp contém apenas números válidos após limpeza
-func FormatWhatsAppOnlyNumbers(whatsapp *string) *string {
-	if whatsapp == nil || *whatsapp == "" {
-		return nil
+// OnlyDigits verifica se o número de WhatsApp contém apenas números válidos após limpeza
+func OnlyDigits(str string) string {
+	var b strings.Builder
+	for _, r := range str {
+		if unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
 	}
-
-	// Remove todos os caracteres não numéricos
-	re := regexp.MustCompile(`\D`)
-	cleanNumber := re.ReplaceAllString(*whatsapp, "")
-
-	return &cleanNumber
-}
-
-// NormalizeEmail normaliza um e-mail para minúsculas e remove espaços extras
-func NormalizeEmail(email *string) *string {
-	if email == nil || *email == "" {
-		return nil
-	}
-
-	normalizedEmail := strings.ToLower(strings.TrimSpace(*email))
-
-	return &normalizedEmail
+	return b.String()
 }

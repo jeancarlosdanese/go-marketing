@@ -78,7 +78,8 @@ func (c *ContactCreateDTO) Normalize() {
 
 	// 🔹 Normaliza WhatsApp (verifica nil antes de normalizar)
 	if c.WhatsApp != nil {
-		c.WhatsApp = utils.SanitizeWhatsApp(c.WhatsApp)
+		normalized := utils.NormalizeWhatsAppNumber(*c.WhatsApp)
+		c.WhatsApp = &normalized
 	}
 
 	// 🔹 Normaliza Gênero (verifica nil antes de normalizar)

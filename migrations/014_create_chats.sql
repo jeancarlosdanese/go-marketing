@@ -21,7 +21,7 @@ CREATE TABLE public.chat_contacts (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   chat_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
-  contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  whatsapp_contact_id UUID NOT NULL REFERENCES whatsapp_contacts(id) ON DELETE CASCADE,
   status VARCHAR(20) DEFAULT 'aberto' CHECK (status IN ('aberto', 'pendente', 'fechado')),
   created_at TIMESTAMP DEFAULT now(),
   updated_at TIMESTAMP DEFAULT now()
