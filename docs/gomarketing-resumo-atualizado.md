@@ -25,7 +25,7 @@ graph TD
     F --> G
   end
 
-  subgraph Backend Node (whatsapp-api)
+  subgraph Backend Node - whatsapp-api
     B2[/sessions/:id/start/] --> H[Baileys SessionManager]
     D1[Webhook Baileys] --> E
     C --> B2
@@ -81,11 +81,11 @@ A estrutura atual oferece base sólida para atendimento automatizado, multicanal
 
 ### ✅ Últimas Versões
 
-| App              | Última Tag        |
-|------------------|-------------------|
-| GoMarketing      | `v1.2.2-alpha`    |
-| whatsapp-api     | `v0.2.0-alpha`    |
-| next-marketing   | `v0.5.0-alpha`    |
+| App            | Última Tag     |
+| -------------- | -------------- |
+| GoMarketing    | `v1.2.2-alpha` |
+| whatsapp-api   | `v0.2.0-alpha` |
+| next-marketing | `v0.5.0-alpha` |
 
 ---
 
