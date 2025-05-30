@@ -5,16 +5,15 @@ graph TD
   end
 
   subgraph Backend Go
-    B --> C[API: /chats, /mensagens, /sugerir-resposta]
-    E[Webhook recebido de Node] --> F[chatSvc.ProcessarMensagemRecebida]
+    B --> C[API REST: /chats, /chat-contacts, /messages, /suggestion-ai]
+    E[Webhook do Node] --> F[chatSvc.ProcessarMensagemRecebida]
     C --> G[PostgreSQL]
     F --> G
   end
 
-  subgraph Backend Node Baileys
-    C2[/sessions/:id/start/] --> H[Baileys SessionManager]
+  subgraph Backend Node - whatsapp-api
+    B2[/sessions/:id/start/] --> H[Baileys SessionManager]
     D1[Webhook Baileys] --> E
-    C --> C2
+    C --> B2
   end
-
 ```
